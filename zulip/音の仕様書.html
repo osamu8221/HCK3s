@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>【チーム2】楽器・音響制御ユニット 開発手順書</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #0f172a;
+            --accent-color: #3b82f6;
+            --success-color: #10b981;
+            --success-bg: #ecfdf5;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.7;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
+            color: var(--primary-color);
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+            letter-spacing: 0.05em;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .step-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border-left: 6px solid var(--accent-color);
+            transition: transform 0.2s ease;
+        }
+
+        .step-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .step-title {
+            color: var(--primary-color);
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-title span {
+            background-color: var(--accent-color);
+            color: white;
+            font-size: 0.9rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .content-list {
+            padding-left: 20px;
+            margin-bottom: 20px;
+        }
+
+        .content-list li {
+            margin-bottom: 8px;
+        }
+
+        /* コードブロックのスタイルを修正（改行を保持する設定） */
+        pre.code-block {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.95rem;
+            overflow-x: auto;
+            margin: 15px 0;
+            line-height: 1.6;
+            white-space: pre;
+            border: 1px solid #334155;
+        }
+
+        .success-box {
+            background-color: var(--success-bg);
+            border: 1px solid #a7f3d0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 25px;
+            position: relative;
+        }
+
+        .success-box h4 {
+            color: var(--success-color);
+            margin: 0 0 10px 0;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .success-box ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #065f46;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>🐸 楽器・音響制御ユニット 開発手順書</h1>
+        <p>「かえるの合唱」自動合奏システムの段階的実装とテストガイド</p>
+    </div>
+
+    <div class="step-card">
+        <h2 class="step-title"><span>Step 1</span> 楽曲データの定義と数値化（Arduino側）</h2>
+        <p>Arduinoが演奏データを扱えるよう、「かえるの合唱」の楽譜を周波数（Hz）の配列に変換します。休符は <code>0.0</code> として扱います。</p>
+        <ul class="content-list">
+            <li>対象曲である「かえるの合唱」のド〜ラまでの周波数を定義します。</li>
+            <li><code>MusicData.h</code> に楽曲の配列を作成します。</li>
+        </ul>
+        
+        <pre class="code-block"><code>// MusicData.h の実装例
+// 周波数定義：ド=261.6, レ=293.7, ミ=329.6, ファ=349.2, ソ=392.0, ラ=440.0, 休符=0.0
+
+// かえるのうた（最初の2小節）
+// 1行を4拍（1小節）に分けて書くと管理しやすいです。
+float melody[] = {
+    // ド    レ    ミ    ファ
+    261.6, 293.7, 329.6, 349.2, 
+    // ミ    レ    ド    休符
+    329.6, 293.7, 261.6,   0.0, 
+    // ミ    ファ  ソ    ラ
+    329.6, 349.2, 392.0, 440.0, 
+    // ソ    ファ  ミ    休符
+    392.0, 349.2, 329.6,   0.0
+};
+
+// 実際の配列サイズを計算しておく
+int melodyLength = sizeof(melody) / sizeof(melody[0]);</code></pre>
+
+        <div class="success-box">
+            <h4>✅ 成功の目安</h4>
+            <ul>
+                <li>コードをコンパイルした際、エラーが出ないこと。</li>
+                <li>休符（0.0）を含めたメロディの配列データが出力できる状態になっていること。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="step-card">
+        <h2 class="step-title"><span>Step 2</span> Processingでの音源基盤と音色の作成（Processing単体）</h2>
+        <p>シリアル通信でArduinoとつなぐ前に、PC側（Processing）単体で狙った音が鳴るか、テスト配列を用いて動作確認を行います。</p>
+        <ul class="content-list">
+            <li><code>AudioPlayer.pde</code> に発振器を用いた音声波形の生成処理を実装します。</li>
+            <li>Processingのコード内にテスト用の配列を用意し、音が正しく出るか確認します。</li>
+        </ul>
+
+        <pre class="code-block"><code>// Processingテスト用配列
+float[] testMelody = {
+    261.6, 293.7, 329.6, 349.2, 392.0, 440.0
+};</code></pre>
+
+        <div class="success-box">
+            <h4>✅ 成功の目安</h4>
+            <ul>
+                <li>Processing上でプログラムを実行した際、<code>testMelody</code> の配列に従って「ド・レ・ミ・ファ・ソ・ラ」とエラーなく音が鳴ること。</li>
+                <li><strong>音色の判別：</strong>ギロ、バイオリン、トランペット、オルガンなどの音色を作り分けた時、聞いて明らかに違う音色になっていること。ノイズや音割れが発生していないこと。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="step-card">
+        <h2 class="step-title"><span>Step 3</span> Arduinoからの周波数送信テスト（Arduino単体）</h2>
+        <p>Processingと繋ぐ前に、Arduino単体でシリアルプリントが正しいタイミングで出ているか確認します。</p>
+        <ul class="content-list">
+            <li><code>InstrumentController</code> から、計算されたタイミングで周波数情報がシリアル通信に乗るかテストします。</li>
+        </ul>
+        <div class="success-box">
+            <h4>✅ 成功の目安</h4>
+            <ul>
+                <li>Arduino IDEの「シリアルモニタ」を開いた時、一定のリズム（例：500ms間隔）で <code>261.6</code> などの数値が改行されながら連続して表示されること。</li>
+                <li>休符のタイミングでは <code>0.0</code> が出力されていること。余計な文字化けが含まれていないこと。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="step-card">
+        <h2 class="step-title"><span>Step 4</span> ArduinoとProcessingの連携（シリアル通信テスト）</h2>
+        <p>Arduinoから送られてきた周波数（Hz）データをProcessingの <code>SerialReceiver.pde</code> で受け取ります。</p>
+        <div class="success-box">
+            <h4>✅ 成功の目安</h4>
+            <ul>
+                <li>Arduinoを繋いでProcessingを実行すると、自動的に「かえるの合唱」のメロディがスピーカーから流れること。</li>
+                <li>Processingのコンソール画面に <code>Received: 261.6 Hz</code> と受信ログが正しく表示されており、通信の遅延（もたつき）を感じないこと。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="step-card">
+        <h2 class="step-title"><span>Step 5</span> テンポ変更機能の実装</h2>
+        <p>指揮者の動き（BPM）に合わせてテンポを変えるための処理 <code>updateTempo()</code> を組み込みます。</p>
+        <div class="success-box">
+            <h4>✅ 成功の目安</h4>
+            <ul>
+                <li>Arduino側のテスト用変数 <code>test_BPM = 60;</code> を <code>test_BPM = 120;</code> に書き換えて再実行した際、Processingから流れる音楽のスピードが<strong>正確に2倍の速さ</strong>になること。</li>
+                <li>テンポを速くしても、音が重なったり途切れたりせず、メロディが崩れないこと。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="step-card">
+        <h2 class="step-title"><span>Step 6</span> 視覚演出の同期確認（LEDマトリクス編）</h2>
+        <p>Arduino UNO R4 WiFi に搭載されているLEDマトリクスを用いて、演奏状態の表示が音と同期しているか確認します。</p>
+        <ul class="content-list">
+            <li><code>drawFrogMatrix()</code> 関数を使用し、演奏状態に応じてLEDマトリクスの表示を更新します。</li>
+        </ul>
+        <div class="success-box">
+            <h4>✅ 成功の目安</h4>
+            <ul>
+                <li>音が鳴っている間（休符以外）はLEDが点灯（または特定のパターンを表示）し、休符の時は消灯するなど、音と光のタイミングが完全に一致していること。</li>
+                <li>LED表示の処理を追加したことで、音楽のテンポに遅延が発生していないこと。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="step-card">
+        <h2 class="step-title"><span>Step 7</span> 視覚演出の同期確認（サーボモータ編）</h2>
+        <p>マイクロサーボモータ（SG92R）を用いて、指定された音階に対応する「紙のカエル」が起き上がる物理演出を制御します。</p>
+        <ul class="content-list">
+            <li><code>moveFrog()</code> 関数を使用し、音階に応じたサーボモータを駆動させます。</li>
+        </ul>
+        <div class="success-box">
+            <h4>✅ 成功の目安</h4>
+            <ul>
+                <li>ド（261.6Hz）が鳴った<strong>瞬間に</strong>、1番のサーボモータ（ドのカエル）がピョコッと動き、音が消えるタイミングで元に戻ること。</li>
+                <li>サーボモータが動く際の処理負荷（電圧降下など）によって、Arduinoのシリアル送信（音楽のテンポ）が遅延したり、システムが再起動したりしないこと。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="step-card">
+        <h2 class="step-title"><span>Step 8</span> 同期制御ユニットとの全体連携（結合テスト）</h2>
+        <p>センサ制御部・同期制御部のArduinoと結合し、システム全体を通したテストを行います。</p>
+        <div class="success-box">
+            <h4>✅ 成功の目安</h4>
+            <ul>
+                <li><strong>演奏開始：</strong> 同期制御ArduinoからSTART信号を受け取るまで楽器側は沈黙し、受け取った瞬間に1音目（ド）が鳴り始めること。</li>
+                <li><strong>テンポ更新：</strong> 演奏の途中で新しいBPM値が送られてきた場合、次の音符から即座に新しいテンポに切り替わること。</li>
+                <li><strong>輪唱成立：</strong> 複数の楽器制御ユニットを繋いだ時、それぞれの担当パートが設計通りのズレで演奏を開始し、全体として音楽的に破綻していないこと。</li>
+            </ul>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

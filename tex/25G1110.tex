@@ -1,58 +1,137 @@
 \documentclass[uplatex,dvipdfmx]{jlreq}
 \usepackage[fleqn,tbtags]{mathtools}
 \usepackage{jlreq-deluxe}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
 \usepackage[noalphabet]{pxchfon} % must be after otf package
 \usepackage{stix2} %欧文＆数式フォント
 \usepackage[fleqn,tbtags]{mathtools} % 数式関連 (w/ amsmath)
 \usepackage{url}
 \usepackage{here}
+\geometry{left=20mm,right=20mm,top=25mm,bottom=25mm}
+
+\title{作業ログ\\ \large プロジェクト名: [加速度センサーを用いた身体動作による輪唱制御システムの構築と視覚フィードバック効果]}
+\author{報告者: 早川　和輝}
+\date{報告日: 2026年5月27日}
+
 \begin{document}
-\title{担当箇所の基本設計・詳細設計の原案}
-\author{25G1110 早川和輝}
-\date{\today}
 \maketitle
 
-\section{基本設計}
-\subsection{本システムの全体構成}
-本システムは，1台の同期用Arduinoと5台の音響用Arduinoを無線で接続したネットワークを基盤とする．
-システム全体の目的として，第一に同期用Arduinoが取得したセンサーデータを受け取り，それを5台の音響用Arduinoに対して送信する．
-次に，データを受信した5台の音響用Arduinoは音楽を流す役割を担う．その際，主旋律を担当する3台のArduinoは輪唱曲を演奏し，残りの2台のArduinoはエンターテインメント性を高めるための効果音などを流す構成となっている．
+\section{進捗サマリー(要約)}
+\begin{itemize}
+    \item 全体進捗率: [15\%]
+    \item マイルストーン達成状況: [達成]
+    \item 主要成果:
+    \begin{itemize}
+        \item 成果1: 「かえるの合唱」の楽譜作成，および各音符の周波数(Hz)数値出力の実装．
+        \item 成果2: Minimライブラリを利用したアコースティックバイオリンの音色合成プログラムの作成．
+    \end{itemize}
+    \item 重大課題(影響度:無し): なし
+\end{itemize}
 
-\subsection{担当箇所の基本設計}
-私が担当する箇所は，全体構成における音響と視覚演出を担う部分であり，具体的には4個のArduinoを用いて楽器の音色制御およびLEDマトリクスの表示制御を行う．
-メイン機能として，ギロおよびバイオリンの音を作成して出力する役割を持つ．
-また，サブ機能として，LEDマトリクス上にカエルの絵などの視覚的な演出を出力する．
-さらに，単一のモジュール内で完結させるのではなく，これら4個のArduino間で通信を横断的に行えるように連携させ，システム全体のエンターテインメント性の向上を目指す．
-これに加えて，センサから得られる値に応じて音楽のテンポを動的に変化させるシステムを導入し，演奏のインタラクティブ性をさらに高める設計としている．
-\begin{figure}[H]
+\section{作業ログ(詳細トラッキング)}
+\begin{table}[H]
     \centering
-    \includegraphics[width=10.0cm]{flow04.jpeg}
-    \caption{担当箇所のフロー図}
-    \label{flow2}
-\end{figure}
-\section{詳細設計}
-\subsection{信号受信とデータ解析処理}
-担当モジュールにおける信号受信の機能を実現するため，同期用Arduinoから送信されたデータを各Arduinoで正確に受信し，処理内容を決定するアルゴリズムを実装する．
-受信したデータフレームから，音の出力に関する指示とマトリクス出力に関する指示を分離して抽出する．
-Arduino間での連携処理を円滑に行うため，データの開始と終了を識別するフレーム構造を厳密に定義する．
-また，受信データに含まれるセンサの値を基にテンポを制御する機構を実装する．
-具体的には，あらかじめ定義した複数のテンポ情報を配列に格納しておく．
-そしてデータ解析のプロセスにおいて，if文を用いた条件分岐によってセンサの値を判定し，配列の中から適切なテンポ情報を見極めて現在のテンポ設定を変更する処理を行う．
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=10.0cm]{flow04_01.jpeg}
-    \caption{データ解析処理のフロー図}
-    \label{flow1}
-\end{figure}
-\subsection{音の作成と出力制御}
-抽出されたデータおよび動的に変更されたテンポ情報に基づき，メイン機能である音の作成および出力を行う．
-ここでは，ギロの摩擦音やバイオリンの擦弦音を模した波形データを生成する．
-全体構成における輪唱曲の展開やエンターテインメント用の音響効果と調和させるため，各Arduinoはデータ解析処理で更新されたテンポ情報に厳密に従い，自身の担当パートの再生速度とタイミングを調整して音を鳴らす．
+    \small
+    \begin{tabular}{lp{1.5cm}p{1.5cm}llp{2.5cm}p{3cm}}
+        \toprule
+        作業項目 & 開始日 & 完了日 & 状態 & 進捗率 & 依存関係・ブロッカー & コメント \\
+        \midrule
+        楽譜作成・Hz出力 & [5/23] & [5/23] & 完了 & 100\% & なし & 1オクターブ高い周波数配列(melody)を作成完了． \\
+        バイオリンの音色作成 & [5/25] & [5/27] & 完了 & 100\% & なし &  AcousticViolinInstrumentの実装．波形とフィルターを調整． \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-\subsection{マトリクス出力と横断的連携}
-サブ機能として，抽出した視覚演出用のデータに基づき，LEDマトリクスへの出力処理を実行する．
-具体的には，動的に変化する音楽のテンポと進行に合わせてカエルの絵などのアニメーションパターンを生成し，LEDマトリクス上に描画する．
-加えて，4個のArduino間で情報をやり取りし，表示されるカエルの絵が一つのマトリクスから別のマトリクスへとシームレスに移動するような横断的な連携処理を実装する．
-これにより，視覚と聴覚が一体となった高度な演出を実現し，鑑賞者に対するエンターテインメント性を飛躍的に向上させる．
+\section{担当箇所の計画前のGCと現在のGC}
+担当箇所である「楽器演奏実装」における，当初計画時（計画前）のガントチャート（GC）の予定と，現在の進捗・変更状況の比較である．
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lp{4cm}p{4cm}l}
+        \toprule
+        タスク名 & 計画前のGC（予定期間） & 現在のGC（実績・修正期間） & 進捗状態 \\
+        \midrule
+        楽譜作成・Hz出力 & [5/23 $\sim$ 5/25] & [5/23 $\sim$ 5/23] & 完了 \\
+        バイオリンの音色作成 & [5/29 $\sim$ 6/6] & [5/25 $\sim$ 5/27] & 完了 \\
+        ギロの音色作成 & [5/29 $\sim$ 6/6] & [5/27 $\sim$ 6/6] & 未着手 \\
+        ArudinoとProcessingの連携 & [6/3 $\sim$ 6/7] & [6/3 $\sim$ 6/7] & 未着手 \\
+        音の動作確認 & [6/5 $\sim$ 6/9] & [6/5 $\sim$ 6/9] & 未着手 \\
+        テンポを変更させる処理の追加 & [6/8 $\sim$ 6/13] & [6/8 $\sim$ 6/13] & 未着手 \\
+        同期との連携 & [6/11 $\sim$ 6/17] & [6/11 $\sim$ 6/17] & 未着手 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+\section{日ごとの作業時間と作業内容}
+今週実施した日ごとの具体的な作業時間および対応内容の詳細です．
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lll}
+        \toprule
+        日付 & 作業時間 & 作業内容 \\
+        \midrule
+        {}[5/23] & [0.5時間] &「かえるの合唱」の楽譜データの作成，および半拍ごとのHz数値の割り出し \\
+        {}[5/25] & [1.0時間] & Processing環境およびMinimライブラリのセットアップ，発音の基本検証 \\
+        {}[5/25] & [1.5時間] & バイオリン音色クラス（AcousticViolinInstrument）の実装  \\
+        {}[5/26] & [1.0時間] & ノイズ・フィルター（MoogFilter）の調整，およびFFTによるスペクトラム描画の実装  \\
+        {}[5/27] & [1.0時間] & 作成したバイオリン音色の全体の動作チェックと音質調整，および本作業ログの作成  \\
+        \midrule
+        \textbf{合計} & \textbf{[5.0時間]} & \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+\section{課題管理}
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{p{3cm}p{3cm}llp{3cm}ll}
+        \toprule
+        課題 & 発生原因 & 影響度 & 優先度 & 対策 & 期限 & 状態 \\
+        \midrule
+        擦弦音のリアルさ向上 & 単純な波形のみでは機械音になる & 高 & 高 & ピンクノイズとMoogFilterを追加し摩擦音を表現 & [5/27] & 解決 \\
+        バイオリンの音色の特徴の尊重 & 低い音程だとバイオリンの良さが損なわれる & 高 & 高 & １オクターブ高い周波数に変換 & [5/27] & 解決 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+\vspace{0.5em}
+\noindent ※影響度=プロジェクトへのインパクト，優先度=対応の緊急性
+
+\section{AI 利用状況と検証(再現性重視)}
+\subsection{利用内容}
+\begin{itemize}
+    \item 利用目的: \LaTeX による作業ログのテンプレート作成
+    \item  入力(プロンプト要旨):
+    \begin{itemize}
+        \item 指定された作業ログのテンプレート項目の生成を依頼 ．
+    \end{itemize}
+    \item  出力概要:
+    \begin{itemize}
+        \item テンプレートの構成のコンパイル可能な作業ログの\LaTeX ソースコード ．
+    \end{itemize}
+\end{itemize}
+
+\subsection{検証方法}
+\begin{itemize}
+    \item  検証手法: 生成された\LaTeX ソースコードの構造確認およびコンパイル検証
+    \item  参照資料: 提供された作業ログテンプレートPDF
+    \item  検証手順:
+    \begin{enumerate}
+        \item 生成されたコードのセクション構成が，テンプレート項目を漏れなく満たしているか目視で確認．
+        \item \LaTeX 環境において実際にコンパイルを行い，エラーを吐かずに正しくPDFが生成されるかを確認．
+    \end{enumerate}
+\end{itemize}
+
+\section{次回計画}
+\begin{itemize}
+    \item  目標: [バイオリンの音色のさらなる改善と，ギロの音色作成と]
+    \item  達成基準: [バイオリンの音色がよりリアルになり，ギロの音色が完成すること]
+    \item  期限: [6/6]
+\end{itemize}
+
+\section{その他}
+連絡事項や，他メンバーとの連携が必要な懸念点があれば記載
+
 
 \end{document}

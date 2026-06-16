@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ハッカソン計画書レビュー：チーム2</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif; line-height: 1.7; color: #2D3748; max-width: 900px; margin: 30px auto; padding: 0 20px; }
+        h1 { color: #1A365D; border-bottom: 3px solid #2B6CB0; padding-bottom: 10px; font-size: 28px; }
+        h2 { color: #2C5282; border-left: 6px solid #4299E1; padding-left: 12px; margin-top: 40px; font-size: 22px; }
+        h3 { color: #2B6CB0; font-size: 18px; margin-top: 20px; }
+        .comment-intro { background-color: #EBF8FF; border-left: 5px solid #3182CE; padding: 15px; border-radius: 4px; margin-bottom: 30px; font-style: italic; }
+        .score-box { background-color: #F7FAFC; border: 1px solid #E2E8F0; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+        .total-score { font-size: 22px; font-weight: bold; color: #C53030; }
+        .badge { display: inline-block; padding: 2px 8px; font-weight: bold; border-radius: 4px; font-size: 14px; }
+        .badge-a { background-color: #C6F6D5; color: #22543D; }
+        .badge-b { background-color: #FEFCBF; color: #744210; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 15px; }
+        th, td { border: 1px solid #CBD5E0; padding: 12px; text-align: left; }
+        th { background-color: #EDF2F7; color: #4A5568; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 8px; }
+        .improvement { background-color: #FFF5F5; border-left: 5px solid #E53E3E; padding: 15px; margin-top: 15px; border-radius: 4px; }
+        .improvement-title { font-weight: bold; color: #9B2C2C; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1>ハッカソン計画書 審査・フィードバック</h1>
+    <p style="text-align: right; color: #718096;">評価日: 2026年5月22日</p>
+
+    <div class="comment-intro">
+        <strong>担当教員より：</strong><br>
+        チーム2のみなさん、計画書の作成お疲れ様でした！全体の構成、および「センサ制御」「音・演出系」の設計レベルが極めて高く、まるで卒業論文の計画を見ているかのような学術的アプローチに大変感銘を受けました。今回は「同期制御」に関する具体的な記述が未完成とのことですので、ルール通り<strong>「現在記載されているコンテンツのみ」</strong>を対象に、2025年度ルーブリックに基づいて厳正に評価しました。ここを直せば完璧なA+になる、というポイントも提示していますので、ぜひ開発に活かしてください！
+    </div>
+
+    <div class="score-box">
+        <h2>▼ 採点結果一覧</h2>
+        <p class="total-score">総合得点: 16点 / 20点満点</p>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 40%;">評価項目</th>
+                    <th style="width: 20%;">評価ランク</th>
+                    <th style="width: 20%;">得点</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1. 背景と目的</td>
+                    <td><span class="badge badge-a">ランク A</span></td>
+                    <td><strong>4点</strong> / 4点</td>
+                </tr>
+                <tr>
+                    <td>2. システムの全体像と構成要素</td>
+                    <td><span class="badge badge-b">ランク B</span></td>
+                    <td><strong>3点</strong> / 4点</td>
+                </tr>
+                <tr>
+                    <td>3. 作業分担とスケジュール</td>
+                    <td><span class="badge badge-b">ランク B</span></td>
+                    <td><strong>2点</strong> / 4点</td>
+                </tr>
+                <tr>
+                    <td>4. 図、表、フローチャート</td>
+                    <td><span class="badge badge-a">ランク A</span></td>
+                    <td><strong>4点</strong> / 4点</td>
+                </tr>
+                <tr>
+                    <td>5. 評価指標と数値目標</td>
+                    <td><span class="badge badge-b">ランク B</span></td>
+                    <td><strong>3点</strong> / 4点</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2>▼ 項目別詳細レビュー＆改善策</h2>
+
+    <h3>1. 背景と目的：【ランク A】（4点）</h3>
+    <p><strong>評価理由：</strong><br>
+    文句なしの素晴らしい出来栄えです。体験型展示やメディアアートへの関心の高まりを背景とし、従来の「鑑賞型」に対する「参加型」の優位性、そしてなぜ「指揮動作」を入力に選んだのかが論理的に説明されています。先行研究（参考文献[1][2][3]など）を適切に引用しながら、リアルタイム制御における既存の技術課題と、本プロジェクトの「役割分散（Arduino間の連携）による解決」という独自性が明確に示されています。</p>
+
+    <h3>2. システムの全体像と構成要素：【ランク B】（3点）</h3>
+    <p><strong>評価理由：</strong><br>
+    FBS（機能分解構造）、PBS（製品分解構造）、状態遷移図、シーケンス図、さらには詳細な回路図やファイル構成表にいたるまで、網羅的に記述されています。本来なら間違いなく「ランクA」のクオリティです。<br>
+    しかし、本システムの中核である「同期制御」の部分（1.4.1.2、3.3.2、3.7.2など）がセクション名のみで中身が空欄となっているため、ルーブリックの「計画書を読むだけでシステムを構築することができる」という基準を満たしきれていません。</p>
+    <div class="improvement">
+        <div class="improvement-title">💡 改善策：</div>
+        同期制御部の「通信プロトコル（ポーリング方式の具体的な仕様など）」や「同期フラグのロジック」をテキストとフローチャートで補完してください。ここが埋まるだけで、第三者が読んでも迷わず実装できる極めて完成度の高い設計書になります。
+    </div>
+
+    <h3>3. 作業分担とスケジュール：【ランク B】（2点）</h3>
+    <p><strong>評価理由：</strong><br>
+    アローダイアグラムを用いてクリティカルパスが「33日（楽器演奏制御）」と定量的に算出されている点、またガントチャートとWBSが連動している点は高く評価できます。<br>
+    しかし、<strong>チームマネジメントの観点で重大な不備</strong>があります。メンバー表には7名の名前（川又、熊本、安尾、陳、常世田、早川、福島）がありますが、図1.8のWBSタスク割り当てを見ると、具体的な個別タスクが「福島」「常世田」「陳」「早川」の4名にしか割り振られていません。残りの3名（川又くん、熊本さん、安尾くん）が「全員」で行う機材調達と統合テスト以外、個別タスクが未割当の、いわゆる「幽霊部員」状態になってしまっています。</p>
+    <div class="improvement">
+        <div class="improvement-title">💡 改善策：</div>
+        ハッカソンは全員野球です！タスクの偏りをなくすため、未割当の3名にも役割を明記してください。たとえば、「折り紙カエルのギミック制作（ハードウェア側）」「Processingの画面エフェクトデザイン」「回路のブレッドボード実装・ハンダ付け」「進捗管理・ドキュメント作成」など、各自の得意分野を活かした具体的なタスクをWBSにプロットしましょう。
+    </div>
+
+    <h3>4. 図、表、フローチャート：【ランク A】（4点）</h3>
+    <p><strong>評価理由：</strong><br>
+    非常に scannable（見やすい・ scannable）で美しく整理されています。図表にはすべて番号とタイトル（「図1.1」「表2.1」など）が付与されており、本文中からも「図2.1より、本システムは〜」と正しく紐付け・説明がなされています。センサ制御の処理フロー（図3.5）や音・演出系のランタイムフロー（図3.6）も、Yes/Noの分岐が明確で実装レベルにまで落とし込めており、高く評価できます。</p>
+
+    <h3>5. 評価指標と数値目標：【ランク B】（3点）</h3>
+    <p><strong>評価理由：</strong><br>
+    MOE（有効指標）からMOP（性能指標）へのブレイクダウンが非常に学術的で洗練されています。特に、BPM推定精度（±4%以内）やダウンビート検出精度（±70ms以内）について先行研究の基準を適用している点や、音響評価に「対数スペクトル距離（LSD）」、主観評価に「平均意見評点（MOS: 目標4.0以上）」を導入している点は、ハッカソンの枠を超えた素晴らしい着眼点です。<br>
+    一方で、13ページの音響演出の総合遅延目標に<strong>「先行研究の指針に基づく s以下を目標値として」</strong>と、肝心の数値（秒数/ミリ秒数）が脱落してしまっている箇所があります。また、同期制御に関する評価指標も未記載です。</p>
+    <div class="improvement">
+        <div class="improvement-title">💡 改善策：</div>
+        <ul>
+            <li>脱落している総合遅延の数値（例：0.1s以下、あるいは 100ms以下など）を、人間が違和感を抱かない遅延の基準（参考文献[14]など）を元に設定・明記してください。</li>
+            <li>未記載の「同期制御」に関するMOP（例：複数台接続時の通信成功率95%以上、同期ジッタ±10ms以内など）を追記しましょう。</li>
+        </ul>
+    </div>
+
+</body>
+</html>
