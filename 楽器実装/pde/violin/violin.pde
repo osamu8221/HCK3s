@@ -7,22 +7,19 @@ import ddf.minim.effects.*;
 Serial myPort;
 Minim minim;
 AudioOutput out;
-FFT fft;
 
 void setup() {
   size(800, 400);
   pixelDensity(2); // 警告対策を入れる場合はここ
 
   minim = new Minim(this);
-  
+
   // 1. まず出力を初期化する（これより上でsetGainするとエラーになるか無視されます）
-  out = minim.getLineOut(Minim.MONO, 1024); 
-  
+  out = minim.getLineOut(Minim.MONO, 1024);
+
   // 2. 必ず初期化した「後」に音量を設定する！
   out.setGain(15.0); // 思い切って「20.0」まで上げてみてください
 
-  fft = new FFT(out.bufferSize(), out.sampleRate());
-  
   // --- シリアル通信の初期化 ---
   String portName = "/dev/cu.usbmodem34B7DA6194E42";
   myPort = new Serial(this, portName, 115200);
@@ -30,19 +27,22 @@ void setup() {
   myPort.bufferUntil('\n');
 }
 void draw() {
-  background(20, 25, 30); 
+  background(20, 25, 30);
 
-  fft.forward(out.mix);
-  stroke(212, 175, 55); 
-  fill(212, 175, 55, 150);
-  for(int i = 0; i < fft.specSize(); i++) {
-    float bandAmplitude = fft.getBand(i) * 15;
-    float x = map(i, 0, fft.specSize(), 0, width * 2);
-    if (x < width) { 
-      rect(x, height, 2, -bandAmplitude);
-    }
+  // --- 音の波形(時間領域)を描画 ---
+  // out.mix は出力中の波形バッファ。FFTスペクトルではなく生波形を表示する。
+  stroke(212, 175, 55);
+  strokeWeight(2);
+  noFill();
+  beginShape();
+  for (int i = 0; i < out.bufferSize(); i++) {
+    float x = map(i, 0, out.bufferSize(), 0, width);
+    float y = height / 2 + out.mix.get(i) * (height / 2);
+    vertex(x, y);
   }
-  
+  endShape();
+  strokeWeight(1);
+
   fill(255);
   textSize(16);
   textAlign(LEFT, TOP);
@@ -56,16 +56,16 @@ void serialEvent(Serial p) {
   String inString = p.readStringUntil('\n');
   if (inString != null) {
     inString = trim(inString);
-    
+
     // ★デバッグ用：受信した生データをProcessingの黒いコンソール画面に表示する
-    println("受信データ: " + inString); 
+    println("受信データ: " + inString);
 
     String[] data = split(inString, ',');
-    
+
     if (data.length >= 2) {
       float freq = float(data[0]);
       float durMs = float(data[1]);
-      
+
       // Arduinoから指示された音程と速さ(長さ)で発音
       if (freq > 0.0 && durMs > 0) {
         float durationSec = durMs / 1000.0;

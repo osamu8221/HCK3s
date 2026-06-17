@@ -5,7 +5,6 @@ import ddf.minim.effects.*;
 
 Minim minim;
 AudioOutput out;
-FFT fft;
 
 // ギロ専用のビートパターン（1要素＝8分音符 250ms）
 // 数値は「擦る長さ（係数）」を表します。
@@ -23,13 +22,12 @@ float[] beatPattern = {
 
 int currentIndex = 0;
 int lastPlayTime = 0;
-int tempoMs = 250; // 8分音符(半拍)の長さ
+int tempoMs = 250; // 8分音符(半拍)の長さ = 30000 / bpm
 
 void setup() {
-  size(800, 400); 
+  size(800, 400);
   minim = new Minim(this);
   out = minim.getLineOut(Minim.MONO, 1024);
-  fft = new FFT(out.bufferSize(), out.sampleRate());
   println("=== Step 2: Guiro Beat Sequencer ===");
 }
 
@@ -54,19 +52,20 @@ void draw() {
     lastPlayTime = now;
   }
 
-  // --- FFTスペクトル描画 ---
-  fft.forward(out.mix);
+  // --- 音の波形(時間領域)を描画 ---
+  // out.mix の生波形をそのまま表示する(FFTスペクトルから変更)。
   stroke(200, 150, 80); // ウッディなオレンジ
-  fill(200, 150, 80, 150);
-  
-  for(int i = 0; i < fft.specSize(); i++) {
-    float bandAmplitude = fft.getBand(i) * 15; 
-    float x = map(i, 0, fft.specSize(), 0, width * 2); 
-    if (x < width) { 
-      rect(x, height, 2, -bandAmplitude);
-    }
+  strokeWeight(2);
+  noFill();
+  beginShape();
+  for (int i = 0; i < out.bufferSize(); i++) {
+    float x = map(i, 0, out.bufferSize(), 0, width);
+    float y = height / 2 + out.mix.get(i) * (height / 2);
+    vertex(x, y);
   }
-  
+  endShape();
+  strokeWeight(1);
+
   fill(255);
   textSize(16);
   textAlign(LEFT, TOP);

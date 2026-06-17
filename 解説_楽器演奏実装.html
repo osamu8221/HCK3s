@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>楽器演奏実装 解説 — 加速度センサーによる輪唱制御システム</title>
+<style>
+  :root{
+    --bg:#f6f7f4; --card:#ffffff; --ink:#1f2a24; --muted:#5d6b63;
+    --line:#e2e6df; --frog:#3f9d5a; --frog-d:#2c7a43; --gold:#c9a227;
+    --violet:#6d5aa8; --code-bg:#1e2622; --code-ink:#e7efe9; --accent:#0f766e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.75;font-size:15px}
+  header{background:linear-gradient(135deg,#2c7a43,#0f766e 60%,#155e63);color:#fff;
+    padding:40px 24px 30px}
+  header .wrap{max-width:980px;margin:0 auto}
+  header h1{margin:0 0 6px;font-size:26px;letter-spacing:.02em}
+  header p{margin:4px 0;opacity:.92;font-size:14px}
+  .badge{display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);
+    border-radius:999px;padding:3px 12px;font-size:12px;margin:8px 6px 0 0}
+  main{max-width:980px;margin:0 auto;padding:24px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:22px 24px;margin:18px 0;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  h2{font-size:20px;margin:0 0 14px;padding-bottom:8px;border-bottom:2px solid var(--frog);
+    display:flex;align-items:center;gap:10px}
+  h2 .n{background:var(--frog);color:#fff;border-radius:8px;font-size:14px;
+    width:28px;height:28px;display:inline-grid;place-items:center;flex:none}
+  h3{font-size:16px;margin:20px 0 8px;color:var(--frog-d)}
+  p{margin:8px 0}
+  .muted{color:var(--muted)}
+  code{background:#eef2ee;border-radius:5px;padding:1px 6px;font-family:"SF Mono",Menlo,Consolas,monospace;
+    font-size:13px;color:#234}
+  pre{background:var(--code-bg);color:var(--code-ink);border-radius:10px;padding:14px 16px;overflow:auto;
+    font-size:12.5px;line-height:1.6;margin:12px 0}
+  pre code{background:none;color:inherit;padding:0}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#eef3ef;font-weight:700}
+  tr:nth-child(even) td{background:#fafbf9}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:12px 0}
+  .tile{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fcfdfc}
+  .tile h4{margin:0 0 6px;font-size:14px;color:var(--accent)}
+  .tile p{margin:4px 0;font-size:13px}
+  .toc{columns:2;column-gap:30px}
+  .toc a{color:var(--frog-d);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .toc li{margin:4px 0}
+  .note{border-left:4px solid var(--gold);background:#fbf7e9;border-radius:0 8px 8px 0;
+    padding:10px 14px;margin:12px 0}
+  .warn{border-left:4px solid #c4543a;background:#fbeee9;border-radius:0 8px 8px 0;
+    padding:10px 14px;margin:12px 0}
+  .ok{border-left:4px solid var(--frog);background:#eef7f0;border-radius:0 8px 8px 0;
+    padding:10px 14px;margin:12px 0}
+  .pill{display:inline-block;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700}
+  .p-msg{background:#e7efe9;color:#1c4d34}
+  .p-tempo{background:#f3edda;color:#7a5e10}
+  kbd{background:#222;color:#fff;border-radius:5px;padding:1px 7px;font-size:12px;font-family:monospace}
+  .flow text{font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif}
+  footer{max-width:980px;margin:0 auto;padding:10px 24px 50px;color:var(--muted);font-size:12.5px}
+  .legend span{display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-size:12.5px}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>楽器演奏実装 — 解説書</h1>
+    <p>プロジェクト：加速度センサーを用いた身体動作による輪唱制御システムの構築と視覚フィードバック効果</p>
+    <p>担当：早川　和輝（楽器演奏実装 / バイオリン子機・サーボ子機）　曲：カエルの歌（輪唱）</p>
+    <div>
+      <span class="badge">Arduino UNO R4 WiFi</span>
+      <span class="badge">WiFi AP + TCP/UDP</span>
+      <span class="badge">Processing + Minim</span>
+      <span class="badge">同期側コードに整合済み</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section>
+  <h2><span class="n">0</span>目次</h2>
+  <ul class="toc">
+    <li><a href="#overview">1. プロジェクト概要</a></li>
+    <li><a href="#arch">2. システム全体構成</a></li>
+    <li><a href="#proto">3. 通信プロトコル（同期側コード準拠）</a></li>
+    <li><a href="#inst">4. 楽器子機 InstClient（バイオリン）</a></li>
+    <li><a href="#round">5. 輪唱のしくみ（1台で2声部）</a></li>
+    <li><a href="#tempo">6. テンポ（3段階）</a></li>
+    <li><a href="#servo">7. サーボ子機 ServoClient</a></li>
+    <li><a href="#proc">8. Processing 側（音色・波形）</a></li>
+    <li><a href="#song">9. 曲データ：カエルの歌</a></li>
+    <li><a href="#todo">10. 未確定・要チーム調整</a></li>
+    <li><a href="#files">11. ファイル一覧</a></li>
+  </ul>
+</section>
+
+<section id="overview">
+  <h2><span class="n">1</span>プロジェクト概要</h2>
+  <p>複数台の Arduino が <strong>PCに依存せず自律的に同期</strong> し、合奏（オーケストラ）を成立させるシステム。
+  指揮棒の動き（加速度センサ）でテンポと演奏開始を制御し、<strong>カエルの歌を輪唱（カノン）</strong>として奏でる。</p>
+  <p><strong>社会的背景：</strong>聴覚に障害のある人にも音楽を楽しんでもらうため、音に連動して動く
+  サーボ（カエルの折り紙）と、Processing 画面の<strong>波形表示</strong>で「音を視覚化」する。</p>
+  <div class="grid">
+    <div class="tile"><h4>担当楽器</h4><p>主旋律3台＝バイオリン・トランペット・オルガン／リズム1台＝ギロ。本書はバイオリン子機とサーボ子機を扱う。</p></div>
+    <div class="tile"><h4>本実装の役割</h4><p>同期親機から来る合図に従い、メロディ・テンポ・輪唱を生成して Processing（音）とサーボ（視覚）を駆動する。</p></div>
+    <div class="tile"><h4>守る制約</h4><p>Processing の音色合成クラスは変更しない。子機がメロディ・テンポ・輪唱を担い、Processing は発音と波形表示のみ。</p></div>
+  </div>
+</section>
+
+<section id="arch">
+  <h2><span class="n">2</span>システム全体構成</h2>
+  <p>センサ→同期親機→各子機の一方向の流れ。<strong>同期親機 SyncMain 自身が WiFi アクセスポイント</strong>になり、
+  子機（センサ・楽器・サーボ）がそこへ無線接続する。</p>
+  <div class="legend" style="margin:8px 0 4px">
+    <span><span class="dot" style="background:#6d5aa8"></span>制御・センサ</span>
+    <span><span class="dot" style="background:#0f766e"></span>同期（親機＝AP）</span>
+    <span><span class="dot" style="background:#c9a227"></span>楽器（音）</span>
+    <span><span class="dot" style="background:#3f9d5a"></span>サーボ（視覚）</span>
+  </div>
+  <svg class="flow" viewBox="0 0 960 360" width="100%" role="img" aria-label="システム構成図">
+    <defs>
+      <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#5d6b63"/>
+      </marker>
+    </defs>
+    <!-- IMU -->
+    <rect x="10" y="150" width="120" height="60" rx="10" fill="#efeaf7" stroke="#6d5aa8"/>
+    <text x="70" y="176" text-anchor="middle" font-size="13" fill="#3b2f63">指揮棒</text>
+    <text x="70" y="194" text-anchor="middle" font-size="11" fill="#6d5aa8">加速度センサ(IMU)</text>
+    <!-- Sens -->
+    <rect x="170" y="150" width="130" height="60" rx="10" fill="#efeaf7" stroke="#6d5aa8"/>
+    <text x="235" y="174" text-anchor="middle" font-size="13" fill="#3b2f63">センサ子機</text>
+    <text x="235" y="192" text-anchor="middle" font-size="11" fill="#6d5aa8">SensClient</text>
+    <!-- Sync AP -->
+    <rect x="360" y="140" width="150" height="80" rx="12" fill="#e3efee" stroke="#0f766e" stroke-width="2"/>
+    <text x="435" y="166" text-anchor="middle" font-size="13" fill="#0c4f4a" font-weight="700">同期親機 SyncMain</text>
+    <text x="435" y="184" text-anchor="middle" font-size="11" fill="#0f766e">WiFi AP「H1-SyncAP」</text>
+    <text x="435" y="200" text-anchor="middle" font-size="11" fill="#0f766e">192.168.4.1</text>
+    <!-- Inst x4 -->
+    <rect x="580" y="40" width="170" height="70" rx="10" fill="#f6f0d8" stroke="#c9a227"/>
+    <text x="665" y="64" text-anchor="middle" font-size="12.5" fill="#6b520f">楽器子機 InstClient ×4</text>
+    <text x="665" y="82" text-anchor="middle" font-size="11" fill="#977c16">バイオリン/トランペット</text>
+    <text x="665" y="97" text-anchor="middle" font-size="11" fill="#977c16">/オルガン/ギロ</text>
+    <!-- Processing -->
+    <rect x="790" y="40" width="150" height="70" rx="10" fill="#fff" stroke="#c9a227" stroke-dasharray="4 3"/>
+    <text x="865" y="68" text-anchor="middle" font-size="12.5" fill="#6b520f">Processing</text>
+    <text x="865" y="86" text-anchor="middle" font-size="11" fill="#977c16">音色 + 波形表示</text>
+    <!-- Servo -->
+    <rect x="580" y="250" width="170" height="70" rx="10" fill="#e9f5ec" stroke="#3f9d5a"/>
+    <text x="665" y="274" text-anchor="middle" font-size="12.5" fill="#1f5e34">サーボ子機 ServoClient</text>
+    <text x="665" y="292" text-anchor="middle" font-size="11" fill="#2c7a43">UDP受動リスナー</text>
+    <!-- Servos -->
+    <rect x="790" y="250" width="150" height="70" rx="10" fill="#fff" stroke="#3f9d5a" stroke-dasharray="4 3"/>
+    <text x="865" y="278" text-anchor="middle" font-size="12.5" fill="#1f5e34">サーボ6機</text>
+    <text x="865" y="296" text-anchor="middle" font-size="11" fill="#2c7a43">音階で動く</text>
+
+    <!-- arrows -->
+    <line x1="130" y1="180" x2="168" y2="180" stroke="#5d6b63" marker-end="url(#ar)"/>
+    <line x1="300" y1="180" x2="358" y2="180" stroke="#5d6b63" marker-end="url(#ar)"/>
+    <text x="330" y="172" text-anchor="middle" font-size="10" fill="#5d6b63">TCP</text>
+    <!-- sync to inst -->
+    <path d="M510 165 C 545 120, 555 90, 578 80" fill="none" stroke="#5d6b63" marker-end="url(#ar)"/>
+    <!-- sync to servo -->
+    <path d="M510 195 C 545 240, 555 270, 578 285" fill="none" stroke="#5d6b63" marker-end="url(#ar)"/>
+    <text x="540" y="118" font-size="10" fill="#0f766e">UDP broadcast</text>
+    <text x="540" y="252" font-size="10" fill="#0f766e">UDP broadcast</text>
+    <!-- inst to processing -->
+    <line x1="750" y1="75" x2="788" y2="75" stroke="#5d6b63" marker-end="url(#ar)"/>
+    <text x="769" y="66" text-anchor="middle" font-size="10" fill="#977c16">USB</text>
+    <!-- servo to servos -->
+    <line x1="750" y1="285" x2="788" y2="285" stroke="#5d6b63" marker-end="url(#ar)"/>
+  </svg>
+  <p class="muted">※「Arduino 1台 ＝ PC 1台」：各楽器子機は USB で<strong>自分専用のPC</strong>の Processing に繋ぐ。
+  USB（音符送出）と WiFi（同期受信）は独立して同時に動くため、シリアルポートの取り合いは起きない。</p>
+</section>
+
+<section id="proto">
+  <h2><span class="n">3</span>通信プロトコル（同期側コードに準拠）</h2>
+  <p>同期側の実コード（<code>SyncMain</code>／<code>InstClient</code>）から読み取った正式仕様。
+  楽器・サーボ子機はこれに厳密に合わせている。</p>
+
+  <h3>3-1. 接続（WiFi＋TCP登録）</h3>
+  <table>
+    <tr><th>項目</th><th>値</th></tr>
+    <tr><td>親機SSID / PASS</td><td><code>H1-SyncAP</code> / <code>sync2026</code></td></tr>
+    <tr><td>親機IP</td><td><code>192.168.4.1</code>（AP）</td></tr>
+    <tr><td>TCPポート（登録用）</td><td><code>9000</code></td></tr>
+    <tr><td>UDPポート（合図用）</td><td><code>9001</code>（ブロードキャスト <code>192.168.4.255</code>）</td></tr>
+    <tr><td>子機名</td><td><code>sens</code> / <code>inst1</code> / <code>inst2</code> / <code>inst3</code> / <code>inst4</code></td></tr>
+  </table>
+  <p>登録手順：子機が TCP 接続 → 自分の名前を送信 → 親機が <span class="pill p-msg">WELCOME</span> 返信
+  → 全子機が揃うと <span class="pill p-msg">READY</span> を一斉送信。</p>
+
+  <h3>3-2. 実行時の合図（UDPブロードキャスト）</h3>
+  <table>
+    <tr><th>メッセージ</th><th>意味</th><th>送信</th></tr>
+    <tr><td><span class="pill p-msg">START</span></td><td>演奏開始</td><td>3回重複送信（取りこぼし防止）</td></tr>
+    <tr><td><span class="pill p-tempo">LEVEL:1</span> / <span class="pill p-tempo">LEVEL:2</span> / <span class="pill p-tempo">LEVEL:3</span></td>
+        <td>テンポ段階（速度）</td><td>変更のたびに3回</td></tr>
+  </table>
+  <p>センサ子機 → 親機（TCP）は <code>"START"</code> と <code>"1"/"2"/"3"</code>。親機がそれを UDP の
+  <code>START</code> / <code>LEVEL:x</code> に変換して全子機へ中継する。</p>
+  <div class="warn"><strong>重要：</strong>プロトコルにあるのは <strong>START と LEVEL（3段階）だけ</strong>。
+  「輪唱だけを開始する合図」や「停止」は存在しない。以前検討した <code>A/B</code> の2合図やテンポ5段階は実コードと不一致のため破棄した。</div>
+</section>
+
+<section id="inst">
+  <h2><span class="n">4</span>楽器子機 InstClient（バイオリン）</h2>
+  <p>チームの <code>InstClient</code> に演奏処理を統合。<strong>ネットワーク層（<code>Instfunc</code> / <code>InstClass</code>）は無改修で再利用</strong>し、
+  <code>InstClient.ino</code> に「メロディ送出・テンポ・輪唱」を追加した。</p>
+
+  <h3>動作の流れ</h3>
+  <table>
+    <tr><th>状態</th><th>処理</th></tr>
+    <tr><td><code>ready &lt; 2</code></td><td><code>connection()</code> で TCP 登録（WELCOME/READY）し、<code>recieveStart()</code> で START を待つ</td></tr>
+    <tr><td>START 受信（<code>ready==2</code>）</td><td><code>startPlaying()</code>：先頭から再生開始</td></tr>
+    <tr><td>演奏中</td><td><code>recieveLevel()</code> でテンポ即時変更＋<code>stepSequencer()</code> で音符送出</td></tr>
+  </table>
+
+  <h3>中核コード（音符送出）</h3>
+  <pre><code>void stepSequencer(){
+    if (!playing) return;
+    unsigned long now = millis();        // delay()ではなくmillisで刻む
+    if (now - lastStepTime &gt;= (unsigned long)tempoMs) {
+        lastStepTime = now;
+        int durMs = (int)(tempoMs * 0.8);            // ゲート率80%
+        sendVoiceNote(playPos, durMs);               // 声部0: 主旋律
+        sendVoiceNote(playPos - ROUND_OFFSET, durMs);// 声部1: 輪唱(16ステップ遅れ)
+        playPos++;                                    // 剰余でループ＝無限カノン
+    }
+}
+// 指定位置の音符を "Hz,ms" でUSB→violin.pde へ(休符・未開始は送らない)
+void sendVoiceNote(long pos, int durMs){
+    if (pos &lt; 0) return;
+    float pitch = melody[pos % melodyLength];
+    if (pitch &lt;= 0.0) return;
+    Serial.print(pitch); Serial.print(","); Serial.println(durMs);
+}</code></pre>
+  <div class="ok"><strong>テンポの途中変更：</strong><code>millis()</code> で刻むので <code>LEVEL</code> を受けて
+  <code>tempoMs</code> を書き換えると、<strong>次のステップから即座に</strong>新しいテンポになる（曲の途中でも切り替わる）。</div>
+  <div class="note"><strong>シリアル共用について：</strong><code>Instfunc</code> のデバッグ出力も USB に流れるが、
+  <code>violin.pde</code> は「数値,数値」以外の行を無視するので、音符行と混在しても問題ない。</div>
+</section>
+
+<section id="round">
+  <h2><span class="n">5</span>輪唱のしくみ（1台で2声部）</h2>
+  <p>輪唱は「楽器ごとに声部を分ける」のではなく、<strong>1台の中でカエルの歌を自分自身とずらして重ねて</strong>作る。
+  全楽器が同じ輪唱を同時に演奏する。声部1は<strong>1フレーズ＝16ステップ（＝8分音符16個＝2小節）遅れ</strong>で自動的に入る。</p>
+  <svg viewBox="0 0 900 150" width="100%" role="img" aria-label="輪唱の重なり図">
+    <text x="10" y="44" font-size="12" fill="#5d6b63">声部0(主旋律)</text>
+    <rect x="120" y="30" width="640" height="22" rx="4" fill="#c9a227" opacity=".85"/>
+    <text x="440" y="46" text-anchor="middle" font-size="11" fill="#fff">カエルの歌 …（ループ）…</text>
+    <text x="10" y="96" font-size="12" fill="#5d6b63">声部1(輪唱)</text>
+    <rect x="280" y="82" width="640" height="22" rx="4" fill="#3f9d5a" opacity=".85"/>
+    <text x="600" y="98" text-anchor="middle" font-size="11" fill="#fff">同じメロディが16ステップ遅れて…</text>
+    <line x1="120" y1="20" x2="120" y2="120" stroke="#999" stroke-dasharray="3 3"/>
+    <line x1="280" y1="20" x2="280" y2="120" stroke="#999" stroke-dasharray="3 3"/>
+    <text x="120" y="138" text-anchor="middle" font-size="11" fill="#5d6b63">START</text>
+    <text x="280" y="138" text-anchor="middle" font-size="11" fill="#2c7a43">+16ステップで2声目が入る</text>
+  </svg>
+  <p>各ステップで「声部0＝<code>melody[playPos]</code>」と「声部1＝<code>melody[playPos-16]</code>」を両方送る。
+  <code>violin.pde</code> は受信音符ごとに新しい音を重ねて鳴らせる（ポリフォニック）ので、<strong>1台だけで輪唱に聞こえる</strong>。</p>
+  <div class="note">同期プロトコルに「輪唱開始の合図」が無いため、輪唱は START 後に<strong>自動</strong>で入る設計。
+  指揮者が任意のタイミングで2声目を入れたい場合は、親機に新メッセージ（例 <code>ROUND</code>）の追加が必要。</div>
+</section>
+
+<section id="tempo">
+  <h2><span class="n">6</span>テンポ（3段階）</h2>
+  <p>親機の <code>LEVEL:1/2/3</code> を bpm に対応づける。8分音符の長さ <code>tempoMs = 30000 / bpm</code>。</p>
+  <table>
+    <tr><th>LEVEL</th><th>意味（暫定）</th><th>bpm</th><th>8分音符(ms)</th></tr>
+    <tr><td>1</td><td>遅い</td><td>100</td><td>300</td></tr>
+    <tr><td>2</td><td>普通（既定）</td><td>140</td><td>214</td></tr>
+    <tr><td>3</td><td>速い</td><td>180</td><td>167</td></tr>
+  </table>
+  <pre><code>const int bpmTable[4] = {0, 100, 140, 180}; // index = level(1..3)
+tempoMs = 30000 / bpmTable[level];</code></pre>
+  <div class="warn"><strong>要調整：</strong>センサ側の「速度→レベル」変換ロジックは未実装（福島さん担当）。
+  どの数字が速い/遅いかの規約が決まったら <code>bpmTable</code> を合わせる。5段階に戻すなら、センサが <code>1〜5</code> を送り
+  親機 <code>recieveFrag()</code> がそれを通すよう <strong>センサ／同期側の改修</strong>が必要。</div>
+</section>
+
+<section id="servo">
+  <h2><span class="n">7</span>サーボ子機 ServoClient（視覚フィードバック）</h2>
+  <p>楽器子機と同じ曲・輪唱・テンポで動き、<strong>鳴っている音階に対応するサーボ</strong>を動かす。
+  カエルの歌は <strong>ド・レ・ミ・ファ・ソ・ラ の6音</strong>なので、サーボ6機に1対1で割り当てる。</p>
+  <table>
+    <tr><th>音階</th><th>ド</th><th>レ</th><th>ミ</th><th>ファ</th><th>ソ</th><th>ラ</th></tr>
+    <tr><th>周波数(Hz)</th><td>523.2</td><td>587.3</td><td>659.2</td><td>698.4</td><td>784.0</td><td>880.0</td></tr>
+    <tr><th>サーボ端子</th><td>D2</td><td>D3</td><td>D4</td><td>D5</td><td>D6</td><td>D7</td></tr>
+  </table>
+  <p>2声部の輪唱を反映するので、<strong>最大2機が同時に動く</strong>。発音時に <code>ACTIVE_ANGLE(70°)</code> へ、
+  発音時間が過ぎたら <code>REST_ANGLE(0°)</code> へ非ブロッキングで戻る。</p>
+  <div class="note"><strong>受動リスナー設計：</strong>サーボは TCP 登録をせず、AP に接続して UDP を聞くだけ。
+  理由は、親機 <code>SyncMain</code> の子機枠が <code>{sens, inst1..inst4}</code> の5枠固定で空きが無いため。
+  <code>START</code> は3回ブロードキャストされ UDP は登録不要で受信できるので、起動時に接続しておけば取りこぼさない。
+  （登録child化したい場合は親機側の配列拡張が必要。）</div>
+</section>
+
+<section id="proc">
+  <h2><span class="n">8</span>Processing 側（音色・波形）</h2>
+  <p>Processing は<strong>音色合成・発音・波形表示のみ</strong>を担当し、音階やテンポは子機（ino）から受け取る。</p>
+  <ul>
+    <li><strong>受信：</strong>シリアルで <code>"Hz,ms"</code> を受け取り、その音程・長さで発音（<code>out.playNote</code>）。複数行を受ければ重ねて鳴る＝輪唱。</li>
+    <li><strong>波形表示：</strong>従来の FFT スペクトルから、<code>out.mix</code> の<strong>時間波形</strong>表示に変更（音を視覚化）。</li>
+    <li><strong>制約：</strong>音色合成クラス（<code>AcousticViolinInstrument</code> 等）は<strong>変更禁止</strong>。今回も無改修。</li>
+  </ul>
+  <pre><code>// violin.pde（受信→発音、抜粋）
+if (freq &gt; 0.0 &amp;&amp; durMs &gt; 0) {
+  out.playNote(0, durMs/1000.0, new AcousticViolinInstrument(freq));
+}</code></pre>
+</section>
+
+<section id="song">
+  <h2><span class="n">9</span>曲データ：カエルの歌</h2>
+  <p>各要素＝8分音符の48スロット・グリッド（休符＝<code>0.0</code>）。チーム正本（Zulip 共有）の楽譜と一致。
+  四分音符は「音＋休符」、八分音符の連続部はそのまま並べて表現している。</p>
+  <pre><code>ドレミファミレド (休) / ミファソラソファミ (休)
+ド(休) ド(休) ド(休) ド(休)
+ドドレレミミファファ / ミレド(休)</code></pre>
+  <p class="muted">コード上は C5=523.2Hz 基準で、配列長 48・<code>ROUND_OFFSET=16</code>（48÷3＝16＝ちょうど1フレーズ）。</p>
+</section>
+
+<section id="todo">
+  <h2><span class="n">10</span>未確定・要チーム調整</h2>
+  <div class="grid">
+    <div class="tile"><h4>① テンポ段階数</h4><p>実装は3段階（LEVEL:1/2/3）。5段階に戻すならセンサ＋同期側で <code>1〜5</code> を扱う改修が必要。</p></div>
+    <div class="tile"><h4>② level→bpm の向き</h4><p>センサの速度判定が未実装。どの数字が速い/遅いかが決まり次第 <code>bpmTable</code> を合わせる。</p></div>
+    <div class="tile"><h4>③ 輪唱の手動合図</h4><p>現状は START 後に自動で2声目。任意タイミングで入れるなら新メッセージ（例 <code>ROUND</code>）を親機に追加。</p></div>
+    <div class="tile"><h4>④ サーボの登録</h4><p>受動リスナーで運用中。正式な子機にするなら親機の <code>namechild</code>／<code>childClients</code> を拡張。</p></div>
+    <div class="tile"><h4>⑤ 音ズレ検証</h4><p>無線（UDP）の遅延が合奏精度に与える影響を実機で測定し、許容範囲を確認する。</p></div>
+  </div>
+</section>
+
+<section id="files">
+  <h2><span class="n">11</span>ファイル一覧</h2>
+  <table>
+    <tr><th>ファイル</th><th>役割</th><th>備考</th></tr>
+    <tr><td><code>Codes/InstClient/InstClient.ino</code></td><td>楽器子機（バイオリン）本体。再生・テンポ・輪唱を統合。</td><td>本実装で更新</td></tr>
+    <tr><td><code>Codes/InstClient/Instfunc.cpp/.h</code></td><td>ネットワーク層（AP接続/TCP登録/UDP受信）</td><td>チーム製・無改修で再利用</td></tr>
+    <tr><td><code>Codes/InstClient/config.h</code></td><td>SSID/IP/ポート/<code>myname="inst1"</code></td><td>チーム製</td></tr>
+    <tr><td><code>Codes/ServoClient/ServoClient.ino</code></td><td>サーボ子機。音階→サーボ6機。UDP受動リスナー。</td><td>本実装で新規作成</td></tr>
+    <tr><td><code>Codes/ServoClient/config.h</code></td><td>SSID/IP/UDPポート</td><td>新規作成</td></tr>
+    <tr><td><code>pde/violin/violin.pde</code></td><td>Processing：音色合成・発音・波形表示</td><td>音色は無改修</td></tr>
+    <tr><td><code>Codes/SyncMain/*</code>, <code>Codes/SensClient/*</code></td><td>同期親機・センサ子機</td><td>他メンバー担当（参照のみ）</td></tr>
+  </table>
+  <p class="muted">旧 <code>arduino/HCK02_02/HCK02_02.ino</code> と <code>arduino/HCK02_01/servo/servo.ino</code> は、
+  自前UDP・A/B・5段階の旧設計のため陳腐化。正本は <code>Codes/</code> 配下のクライアント。</p>
+</section>
+
+</main>
+<footer>
+  生成補助：Claude Code　／　本書はバイオリン子機・サーボ子機の実装を、入手した同期側コードに整合させた時点の解説です。
+</footer>
+</body>
+</html>
