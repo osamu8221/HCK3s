@@ -2,10 +2,15 @@
 // ボード: Arduino UNO R4 WiFi (オンボードESP32-S3 / WiFiS3ライブラリ)
 //
 // 役割:
-//   ・同期用Arduinoから【WiFi UDPブロードキャスト】で「再生の合図」と「テンポ情報(0〜4)」を受信
+//   ・同期用Arduinoから【WiFi UDPユニキャスト】で「再生の合図」と「テンポ情報(0〜4)」を受信
+//     → ★情報伝達は共通モジュール SyncClient.h に統一(ギロ用inoと完全に同一)。
 //   ・カエルの歌を【楽器ごとに声部を分けた輪唱】にして、
 //     このArduinoが担当する1声部の音符を "Hz,ms" で Processing へ送信
 //   ・Processing側は音色生成と再生・波形表示のみを担当する
+//
+// ★2026-06-18: 同期制御がブロードキャスト→ユニキャストに変更。受信専用の楽器は親機へ
+//   自己登録(hello)を送ってIPを知らせる必要がある(SyncClientが起動時＋定期的に実施)。
+//   ※UDPの受信ロジック自体は uni/broadcast 共通で不変。
 //
 // 輪唱の声部割り当て (ROUND_OFFSET=16ステップ=2小節):
 //   VOICE_ID=0 (inst1) : 'A'と同時に第1声を開始
@@ -17,25 +22,27 @@
 // 接続:
 //   USB Serial (115200) -> このボード専用PCの violin.pde (バイオリンの音色・再生・波形)
 //     ※「Arduino 1台 につき PC 1台」。各楽器は自分のPCでProcessingを動かす。
-//   WiFi (UDP) <- 同期用Arduinoのブロードキャスト (全受信機が同一データを受信)
+//   WiFi (UDP ユニキャスト) <- 同期用Arduino (自己登録したIP宛にコマンドが届く)
 //
 // 同期用Arduino から受信するUDPペイロード:
 //   '0'〜'4' : テンポ情報。ino配列のbpmにリンクさせ、再生途中でも即時反映する。
 //   'A'      : 音楽開始の合図。各機は自分の VOICE_ID に応じた遅延後に再生を始める。
 //   'X'      : 停止合図。
 
-#include <WiFiS3.h>
+#include "SyncClient.h"   // 共通: 情報伝達(WiFi接続/自己登録/コマンド受信)
+#include "FrogMatrix.h"   // 2つのinoに共通: ドットのカエル(LEDマトリクス)
 
 // ============================================================
-// WiFi設定: 同期Arduinoと全受信機を同じネットワーク(同一サブネット)に入れる。
-//   同期Arduinoは 255.255.255.255:SYNC_UDP_PORT にコマンドをブロードキャストする。
+// 通信設定: ギロ用inoと同じ値にそろえる。★は各自の環境に合わせる。
+//   ★2026-06-18: 同期制御がブロードキャスト→ユニキャストに変更。
+//     受信専用の楽器は親機へ自己登録(hello)を送り、IPを知らせる必要がある(SyncClientが実施)。
 // ============================================================
-const char* WIFI_SSID = "YOUR_SSID";       // ★各自の環境に合わせる
-const char* WIFI_PASS = "YOUR_PASSWORD";   // ★各自の環境に合わせる
-const unsigned int SYNC_UDP_PORT = 50007;  // 同期Arduinoと一致させる
-
-WiFiUDP udp;
-char udpBuf[32];
+const char* WIFI_SSID = "YOUR_SSID";              // ★
+const char* WIFI_PASS = "YOUR_PASSWORD";          // ★
+IPAddress   SYNC_HOST_IP(192, 168, 1, 100);       // ★同期制御(親機)のIP
+const unsigned int SYNC_REG_PORT  = 50008;        // ★親機が自己登録(hello)を受けるポート
+const unsigned int SYNC_RECV_PORT = 50007;        // この楽器が待ち受ける受信ポート
+const char* NODE_NAME = "violin";                 // 自己登録で名乗る名前
 
 // 書式: "音程(Hz),発音時間(ms)\n"
 float melody[] = {
@@ -81,16 +88,22 @@ bool playing = false;
 // 非ブロッキングなシーケンサ用タイマ
 unsigned long lastStepTime = 0;
 
+SyncClient sync;            // 共通: 情報伝達
+FrogMatrix frog;            // 共通: ドットのカエル
+
 void setup() {
   Serial.begin(115200);     // -> このボード専用PCのProcessing
 
-  connectWiFi();            // <- 同期Arduinoと同じネットワークに接続
-  udp.begin(SYNC_UDP_PORT); // 同期ブロードキャストの受信開始
+  frog.begin();             // LEDマトリクス初期化(まだ消灯)
+
+  // WiFi接続→受信開始→親機へ自己登録(以降ハートビートで再登録)
+  sync.begin(WIFI_SSID, WIFI_PASS, SYNC_HOST_IP,
+             SYNC_REG_PORT, SYNC_RECV_PORT, NODE_NAME, processSyncByte);
 }
 
 void loop() {
-  // 同期Arduinoからの「テンポ変更」「開始/停止合図」を常時監視する
-  handleSyncCommand();
+  // 同期制御からの受信処理 + 自己登録ハートビート
+  sync.update();
 
   // --- マスタークロックによる再生 ---
   // delay()ではなくmillis()で刻むので、再生途中のテンポ変更に即応できる。
@@ -102,33 +115,12 @@ void loop() {
       playPos++; // 次のステップへ(メロディは剰余でループ＝無限カノン)
     }
   }
+
+  // 共通: 音が流れている間「ドットのカエル」をループさせる(再生中のみ進む)
+  frog.update();
 }
 
-// WiFi接続(接続できるまで待つ)
-void connectWiFi() {
-  int status = WL_IDLE_STATUS;
-  while (status != WL_CONNECTED) {
-    status = WiFi.begin(WIFI_SSID, WIFI_PASS);
-    unsigned long t0 = millis();
-    while (status != WL_CONNECTED && millis() - t0 < 8000) {
-      delay(300);
-      status = WiFi.status();
-    }
-  }
-}
-
-// 同期Arduinoからのコマンド受信(UDPブロードキャスト)
-void handleSyncCommand() {
-  int packetSize = udp.parsePacket();
-  if (packetSize <= 0) return;
-
-  int n = udp.read(udpBuf, sizeof(udpBuf));
-  for (int i = 0; i < n; i++) {
-    processSyncByte(udpBuf[i]);
-  }
-}
-
-// 受信した1バイトのコマンドを処理
+// 受信した1バイトのコマンドを処理(SyncClientから呼ばれる)
 void processSyncByte(char c) {
   if (c >= '0' && c <= '4') {
     // テンポ情報(0〜4): ino配列のbpmにリンク。tempoMsを即時更新するので、
@@ -141,10 +133,12 @@ void processSyncByte(char c) {
     playing = true;
     playPos = 0;
     lastStepTime = millis();
+    frog.start();          // ★音と同時にLEDマトリクスのカエルを開始
 
   } else if (c == 'X') {
     // 停止合図
     playing = false;
+    frog.stop();           // 停止でカエル消灯
   }
 }
 
