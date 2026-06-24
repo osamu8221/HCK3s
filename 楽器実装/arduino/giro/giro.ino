@@ -2,37 +2,33 @@
 // ボード: Arduino UNO R4 WiFi (オンボードESP32-S3 / WiFiS3ライブラリ)
 //
 // 役割:
-//   ・同期用Arduinoから「再生の合図」と「テンポ情報(0〜4)」を【WiFi UDPユニキャスト】で受信
-//     → ★情報伝達は共通モジュール SyncClient.h に統一(バイオリン用inoと完全に同一)。
-//   ・ギロのビートパターン(リズム)を【このArduinoが保持】し、
-//     各8分音符ステップの「擦る長さ(ms)」を giro.pde へシリアル送信する。
-//     ※元は giro.pde にあったパターン情報を ino 側へ移動した。
-//   ・giro.pde 側は音色生成・再生・波形表示のみを担当する。
-//   ・「再生の合図」でオンボードLEDマトリクスの「ドットのカエル」を
-//     音と同時に開始し、再生中はループさせる(2つのinoに共通=FrogMatrix.h)。
+//   ・親機(同期制御 SyncMain)へ【TCPで自己登録】し、WELCOME→READY の後、
+//     【UDPテキスト命令】 START / ROUND / LEVEL:n を受信する。
+//       → ★情報伝達は Codes 2 の InstClient と同一の InstClass(Instfunc.cpp)に統一。
+//   ・ギロのビートパターン(リズム)を【このArduinoが保持】し、各8分音符ステップの
+//     「擦る長さ(ms)」を giro.pde へシリアル送信する。
+//   ・giro.pde 側は音色生成・再生・波形表示のみを担当する(.pdeは変更しない)。
+//   ・「演奏開始」でオンボードLEDマトリクスの「ドットのカエル」を音と同時に開始する。
 //
-// ★2026-06-18: 同期制御がブロードキャスト→ユニキャストに変更。
-//   受信専用の楽器は親機にIPを知らせる必要があるため、SyncClient が
-//   起動時＋定期的に親機へ自己登録(hello)を送る。受信ロジック自体は不変。
+// ★2026-06-24: 通信を SyncClient(UDPユニキャスト '0-4'/'A'/'X') から
+//   Codes 2 の InstClass(TCP登録 + UDPテキスト START/ROUND/LEVEL)へ全置換。
+//   【親機主導】: この機は「自分宛ての START または ROUND」を受けた時点で
+//   stepPos=0 からリズムを開始する。輪唱のずれは親機 SyncMain が決める。
 //
 // 接続:
 //   USB Serial (115200) -> このボード専用PCの giro.pde
-//   WiFi (UDP ユニキャスト) <- 同期用Arduino
+//   WiFi (TCP登録 + UDPテキスト命令) <- 親機 SyncMain (192.168.4.1)
 //
-// 受信コマンド(バイオリン用inoと共通): '0'〜'4' テンポ / 'A' 再生開始 / 'X' 停止
+// 親機 SyncMain から受信するUDPテキスト命令 (バイオリン用inoと共通):
+//   "START" / "START:inst2" : 演奏開始(自分宛てなら開始)
+//   "ROUND" / "ROUND:inst2" : 輪唱で後から参加(自分宛てなら開始)
+//   "LEVEL:1" 〜 "LEVEL:3"   : 速度レベル(全機が受信して反映)
+//
+// この機の名前は config.h の myname で設定する(ギロ担当=inst2 など)。
 
-#include "SyncClient.h"   // 共通: 情報伝達(WiFi接続/自己登録/コマンド受信)
-#include "FrogMatrix.h"   // 共通: ドットのカエル(LEDマトリクス)
-
-// ============================================================
-// 通信設定: バイオリン用inoと同じ値にそろえる。★は各自の環境に合わせる。
-// ============================================================
-const char* WIFI_SSID = "YOUR_SSID";              // ★
-const char* WIFI_PASS = "YOUR_PASSWORD";          // ★
-IPAddress   SYNC_HOST_IP(192, 168, 1, 100);       // ★同期制御(親機)のIP
-const unsigned int SYNC_REG_PORT  = 50008;        // ★親機が自己登録(hello)を受けるポート
-const unsigned int SYNC_RECV_PORT = 50007;        // この楽器が待ち受ける受信ポート
-const char* NODE_NAME = "giro";                   // 自己登録で名乗る名前
+#include "Instfunc.h"     // Codes 2 と同一: 情報伝達(TCP登録/UDPテキスト命令受信)
+#include "config.h"       // 通信設定 + この機の myname
+#include "FrogMatrix.h"   // ドットのカエル(LEDマトリクス)
 
 // ============================================================
 // ギロのビートパターン（1要素＝8分音符）。
@@ -52,36 +48,46 @@ float beatPattern[] = {
 const int patternLength = sizeof(beatPattern) / sizeof(beatPattern[0]);
 
 // ============================================================
-// テンポ: 同期側から来る 0〜4 と bpm をリンク(バイオリン用inoと共通の表)。
+// テンポ: 親機から来る LEVEL:n と bpm をリンク(バイオリン用inoと共通の表)。
 //   8分音符の長さ(ms) = 30000 / bpm
+//   LEVEL 1:120bpm 2:140bpm 3:160bpm
 // ============================================================
 const int NUM_TEMPOS = 5;
 const int tempoBpmTable[NUM_TEMPOS] = {100, 120, 140, 160, 180};
-int tempoStage = 1;        // 既定: 120bpm
-int tempoMs = 250;         // 8分音符の長さ(ms) = 30000 / bpm
+int tempoMs = 250;          // 8分音符の長さ(ms) = 30000 / bpm (既定 120bpm)
 
+// 演奏状態
 bool playing = false;
-long stepPos = 0;          // 'A'からの経過ステップ(0開始, 剰余でパターンをループ)
+long stepPos = 0;           // 演奏開始からの経過ステップ(0開始, 剰余でパターンをループ)
 unsigned long lastStepTime = 0;
 
-SyncClient sync;           // 共通: 情報伝達
-FrogMatrix frog;           // 共通: ドットのカエル
+InstClass inst;             // Codes 2 と同一: 情報伝達
+FrogMatrix frog;            // ドットのカエル
+
+// 接続を始めるまでの遅延管理(InstClient.inoと同じ作り)
+unsigned long bootAt = 0;
+bool connectionReady = false;
 
 void setup() {
-  Serial.begin(115200);    // -> このボード専用PCの giro.pde
-
-  frog.begin();            // LEDマトリクス初期化(まだ消灯)
-
-  // WiFi接続→受信開始→親機へ自己登録(以降ハートビートで再登録)
-  sync.begin(WIFI_SSID, WIFI_PASS, SYNC_HOST_IP,
-             SYNC_REG_PORT, SYNC_RECV_PORT, NODE_NAME, processSyncByte);
+  inst.Starts();            // Serial(115200)+WiFi接続+UDP開始 (-> giro.pde)
+  frog.begin();             // LEDマトリクス初期化(まだ消灯)
+  bootAt = millis();
 }
 
 void loop() {
-  // 同期制御からの受信処理 + 自己登録ハートビート
-  sync.update();
+  // 1. まずはTCP接続と登録、READY通知を待つ
+  if (inst.ready < 1) {
+    if (!connectionReady && millis() - bootAt >= INITIAL_CONNECT_DELAY_MS) {
+      connectionReady = true;
+    }
+    if (connectionReady) inst.connection();
+    return;
+  }
 
-  // --- マスタークロックによるリズム再生(millis()で非ブロッキング) ---
+  // 2. READY後: 親機からのUDPテキスト命令を監視(自分宛てSTART/ROUNDで演奏開始)
+  handleCommand(inst.recieveCommand());
+
+  // 3. マスタークロックによるリズム再生(millis()で非ブロッキング)
   if (playing) {
     unsigned long now = millis();
     if (now - lastStepTime >= (unsigned long)tempoMs) {
@@ -91,29 +97,60 @@ void loop() {
     }
   }
 
-  // 共通: 音が流れている間「ドットのカエル」をループさせる(再生中のみ進む)
+  // 音が流れている間「ドットのカエル」をループさせる(再生中のみ進む)
   frog.update();
 }
 
-// 受信した1バイトのコマンドを処理(SyncClientから呼ばれる) ── バイオリン用inoと共通の合図
-void processSyncByte(char c) {
-  if (c >= '0' && c <= '4') {
-    // テンポ情報: tempoMsを即時更新 → 次ステップから新テンポ(途中変更に即応)
-    tempoStage = c - '0';
-    tempoMs = 30000 / tempoBpmTable[tempoStage];
+// この命令が自分(myname)宛てか判定する。
+//   "START" → 全楽器対象 / "START:inst2" → inst2だけ / カンマ区切り対応。
+bool commandTargetsMe(String command, const char* eventName) {
+  String event(eventName);
+  if (command == event) return true;
 
-  } else if (c == 'A') {
-    // 再生開始の合図: リズム開始 + カエルを音と同時に開始
-    playing = true;
-    stepPos = 0;
-    lastStepTime = millis();
-    frog.start();          // ★音と同時にLEDマトリクスのカエルを開始
+  String prefix = event + ":";
+  if (!command.startsWith(prefix)) return false;
 
-  } else if (c == 'X') {
-    // 停止合図: リズム停止 + カエル消灯
-    playing = false;
-    frog.stop();
+  String targets = command.substring(prefix.length());
+  int start = 0;
+  while (start <= targets.length()) {
+    int comma = targets.indexOf(',', start);
+    int end = comma >= 0 ? comma : targets.length();
+    String target = targets.substring(start, end);
+    target.trim();
+    if (target == myname) return true;
+    if (comma < 0) break;
+    start = comma + 1;
   }
+  return false;
+}
+
+// 受信したUDPテキスト命令を処理する。
+//   親機主導: 自分宛ての START / ROUND を受けた時点で stepPos=0 からリズム開始。
+void handleCommand(String command) {
+  if (command.length() == 0) return;
+
+  if (commandTargetsMe(command, "START") || commandTargetsMe(command, "ROUND")) {
+    inst.ready = 2;
+    startPlayback();
+    Serial.println(command.startsWith("ROUND") ? "ROUND" : "START");
+
+  } else if (command.startsWith("LEVEL:") && command.length() > 6) {
+    int level = command.substring(6).toInt();
+    inst.currentLevel = level;
+    if (level < 0) level = 0;
+    if (level > NUM_TEMPOS - 1) level = NUM_TEMPOS - 1;
+    tempoMs = 30000 / tempoBpmTable[level];
+    Serial.print("LEVEL:");
+    Serial.println(inst.currentLevel);
+  }
+}
+
+// リズムを先頭から開始する(自分宛てSTART/ROUND受信時)。
+void startPlayback() {
+  playing = true;
+  stepPos = 0;
+  lastStepTime = millis();
+  frog.start();              // ★音と同時にLEDマトリクスのカエルを開始
 }
 
 // 現在ステップの「擦る長さ(ms)」を giro.pde へ送信(休符は送らない)。

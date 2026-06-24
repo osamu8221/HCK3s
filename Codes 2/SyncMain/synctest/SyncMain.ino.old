@@ -1,0 +1,24 @@
+#include <WiFiS3.h>
+#include "config.h"
+#include "Syncfunc.h"
+
+SyncClass sync;
+
+void setup(){
+    sync.Starts();
+}
+void loop(){
+    if (sync.ready == 0){
+        // 全子機が揃うのを待つ
+        sync.connection();
+    } 
+    else if (sync.ready == 1) {
+        // 接続完了直後に一度だけ READY を送信
+        sync.sendReady();
+        sync.ready = 2; // 指揮（中継）モードへ移行
+    } 
+    else {
+        // センサからの指示（START/SPEED）を監視し、楽器へ中継
+        sync.recieveFrag();
+    }
+}

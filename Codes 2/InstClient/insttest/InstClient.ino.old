@@ -1,0 +1,26 @@
+#include <WiFiS3.h>
+#include "config.h"
+#include "Instfunc.h"
+
+InstClass inst;
+
+
+void setup(){
+    inst.Starts();
+
+}
+void loop(){
+    if (inst.ready < 2){
+        // 登録(TCP)と、演奏開始指示(UDP)の両方を待機
+        inst.connection();   
+        inst.recieveStart(); 
+    } 
+    else {
+        // 演奏中：親機からの速度変更指示(UDP)を拾う
+        int level = inst.recieveLevel();
+        if (level > 0) {
+            // ここで音楽のテンポを変える処理を呼ぶ
+            Serial.print("テンポ変更通知を受信: レベル "); Serial.println(level);
+        }
+    }
+}
