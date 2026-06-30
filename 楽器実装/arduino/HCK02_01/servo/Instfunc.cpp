@@ -1,7 +1,7 @@
 #include "Instfunc.h"
 
 InstClass::InstClass()
-    : isRegistered(false), ready(0), currentLevel(0), currentRound(0) {
+    : isRegistered(false), ready(0), currentLevel(DEFAULT_LEVEL) {
     serverIP.fromString(SERVER_IP);
 }
 
@@ -148,17 +148,5 @@ int InstClass::recieveInstruction() {
         return this->currentLevel;
     }
 
-    if (msg == "ROUND") {
-        this->currentRound++;
-        Serial.print("[UDP] ラウンド指示受信: ");
-        Serial.println(this->currentRound);
-        return 0;
-    }
-
-    if (msg.startsWith("ROUND:")) {
-        this->currentRound = msg.substring(6).toInt();
-        Serial.print("[UDP] ラウンド指示受信: ");
-        Serial.println(this->currentRound);
-    }
     return 0;
 }

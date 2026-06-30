@@ -12,6 +12,7 @@
 #define UDP_PORT 9001
 #define INITIAL_CONNECT_DELAY_MS 1500
 #define CONNECTION_RETRY_DELAY_MS 250
+#define DEFAULT_LEVEL 2          // STOP後/起動時の既定レベル(Codes 3 と統一)
 
 // この機の名前。Codes 2 と同様に親機へTCP登録するため、
 //   親機 SyncMain の namechild = {sens, inst1, inst2, inst3, inst4} の中の

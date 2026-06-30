@@ -2,27 +2,27 @@
 // ボード: Arduino UNO R4 WiFi (オンボードESP32-S3 / WiFiS3ライブラリ)
 //
 // 役割:
-//   ・親機(同期制御 SyncMain)へ【TCPで自己登録】し、WELCOME→READY の後、
-//     【UDPテキスト命令】 START / ROUND / LEVEL:n を受信する。
-//       → ★情報伝達は Codes 2 の InstClient と同一の InstClass(Instfunc.cpp)に統一。
+//   ・親機(同期制御 SyncMain / Codes 3)へ【TCPで自己登録】し、WELCOME→READY の後、
+//     UDP命令 START / STOP / LEVEL:n を受信する(情報伝達は InstClass / Instfunc.cpp)。
 //   ・ギロのビートパターン(リズム)を【このArduinoが保持】し、各8分音符ステップの
 //     「擦る長さ(ms)」を giro.pde へシリアル送信する。
 //   ・giro.pde 側は音色生成・再生・波形表示のみを担当する(.pdeは変更しない)。
 //   ・「演奏開始」でオンボードLEDマトリクスの「ドットのカエル」を音と同時に開始する。
 //
-// ★2026-06-24: 通信を SyncClient(UDPユニキャスト '0-4'/'A'/'X') から
-//   Codes 2 の InstClass(TCP登録 + UDPテキスト START/ROUND/LEVEL)へ全置換。
-//   【親機主導】: この機は「自分宛ての START または ROUND」を受けた時点で
-//   stepPos=0 からリズムを開始する。輪唱のずれは親機 SyncMain が決める。
-//
 // 接続:
 //   USB Serial (115200) -> このボード専用PCの giro.pde
-//   WiFi (TCP登録 + UDPテキスト命令) <- 親機 SyncMain (192.168.4.1)
+//   WiFi (TCP登録 + UDP命令) <- 親機 SyncMain (192.168.4.1)
 //
-// 親機 SyncMain から受信するUDPテキスト命令 (バイオリン用inoと共通):
-//   "START" / "START:inst2" : 演奏開始(自分宛てなら開始)
-//   "ROUND" / "ROUND:inst2" : 輪唱で後から参加(自分宛てなら開始)
-//   "LEVEL:1" 〜 "LEVEL:3"   : 速度レベル(全機が受信して反映)
+// ★2026-06-25: 親機を Codes 3 に更新。プロトコルが変わったため楽器側も合わせた:
+//   ・開始は名前指定ではなく、親機がこの機のIP宛にunicastするプレーンな "START"。
+//   ・"ROUND" は廃止(輪唱のずれは親機が8拍ごとに次グループへunicastして作る)。
+//   ・"STOP" を追加(停止して開始待ちへ戻り、レベルを既定=2へ戻す)。
+//   ・LEVEL→BPMは Codes 3 と統一: LEVEL 1/2/3 = 80/100/120 bpm。
+//
+// 親機 SyncMain(Codes 3) から受信するUDP命令 (バイオリン用inoと共通):
+//   "START"   : 演奏開始(この機のIP宛にunicast。受信=自分の出番)
+//   "STOP"    : 停止(broadcast)。開始待ちへ戻り LEVEL=2 に戻す
+//   "LEVEL:1" 〜 "LEVEL:3" : 速度レベル(broadcast。全機が受信して反映)
 //
 // この機の名前は config.h の myname で設定する(ギロ担当=inst2 など)。
 
@@ -48,13 +48,13 @@ float beatPattern[] = {
 const int patternLength = sizeof(beatPattern) / sizeof(beatPattern[0]);
 
 // ============================================================
-// テンポ: 親機から来る LEVEL:n と bpm をリンク(バイオリン用inoと共通の表)。
+// テンポ: 親機 Codes 3 の LEVEL_BPM と一致させる(輪唱の8拍ずれが揃うため必須)。
 //   8分音符の長さ(ms) = 30000 / bpm
-//   LEVEL 1:120bpm 2:140bpm 3:160bpm
+//   LEVEL 1:80bpm(375ms) 2:100bpm(300ms) 3:120bpm(250ms)
+//   ※添字は level-1。既定は DEFAULT_LEVEL(=2, 100bpm)。
 // ============================================================
-const int NUM_TEMPOS = 5;
-const int tempoBpmTable[NUM_TEMPOS] = {100, 120, 140, 160, 180};
-int tempoMs = 250;          // 8分音符の長さ(ms) = 30000 / bpm (既定 120bpm)
+const int LEVEL_BPM[3] = {80, 100, 120};   // Codes 3 SyncMain と同一
+int tempoMs = 30000 / LEVEL_BPM[DEFAULT_LEVEL - 1];  // 既定 100bpm = 300ms
 
 // 演奏状態
 bool playing = false;
@@ -84,7 +84,7 @@ void loop() {
     return;
   }
 
-  // 2. READY後: 親機からのUDPテキスト命令を監視(自分宛てSTART/ROUNDで演奏開始)
+  // 2. READY後: 親機からのUDP命令を監視(START=演奏開始 / STOP=停止 / LEVEL=テンポ)
   handleCommand(inst.recieveCommand());
 
   // 3. マスタークロックによるリズム再生(millis()で非ブロッキング)
@@ -101,56 +101,46 @@ void loop() {
   frog.update();
 }
 
-// この命令が自分(myname)宛てか判定する。
-//   "START" → 全楽器対象 / "START:inst2" → inst2だけ / カンマ区切り対応。
-bool commandTargetsMe(String command, const char* eventName) {
-  String event(eventName);
-  if (command == event) return true;
-
-  String prefix = event + ":";
-  if (!command.startsWith(prefix)) return false;
-
-  String targets = command.substring(prefix.length());
-  int start = 0;
-  while (start <= targets.length()) {
-    int comma = targets.indexOf(',', start);
-    int end = comma >= 0 ? comma : targets.length();
-    String target = targets.substring(start, end);
-    target.trim();
-    if (target == myname) return true;
-    if (comma < 0) break;
-    start = comma + 1;
-  }
-  return false;
-}
-
-// 受信したUDPテキスト命令を処理する。
-//   親機主導: 自分宛ての START / ROUND を受けた時点で stepPos=0 からリズム開始。
+// 受信したUDP命令を処理する(Codes 3: START/STOP/LEVEL)。
+//   START は親機がこの機のIP宛にunicastするので、受信したら自分の出番=先頭から開始。
 void handleCommand(String command) {
   if (command.length() == 0) return;
 
-  if (commandTargetsMe(command, "START") || commandTargetsMe(command, "ROUND")) {
+  if (command == "START") {
     inst.ready = 2;
-    startPlayback();
-    Serial.println(command.startsWith("ROUND") ? "ROUND" : "START");
+    startPlayback();         // 先頭(stepPos=0)からリズム開始
+    Serial.println("START");
+
+  } else if (command == "STOP") {
+    inst.ready = 1;          // 開始待ちへ戻す
+    stopPlayback();
+    inst.currentLevel = DEFAULT_LEVEL;
+    tempoMs = 30000 / LEVEL_BPM[DEFAULT_LEVEL - 1];   // 既定テンポへ戻す
+    Serial.println("STOP");
 
   } else if (command.startsWith("LEVEL:") && command.length() > 6) {
     int level = command.substring(6).toInt();
+    if (level < 1) level = 1;
+    if (level > 3) level = 3;
     inst.currentLevel = level;
-    if (level < 0) level = 0;
-    if (level > NUM_TEMPOS - 1) level = NUM_TEMPOS - 1;
-    tempoMs = 30000 / tempoBpmTable[level];
+    tempoMs = 30000 / LEVEL_BPM[level - 1];
     Serial.print("LEVEL:");
-    Serial.println(inst.currentLevel);
+    Serial.println(level);
   }
 }
 
-// リズムを先頭から開始する(自分宛てSTART/ROUND受信時)。
+// リズムを先頭から開始する(START受信時)。
 void startPlayback() {
   playing = true;
   stepPos = 0;
   lastStepTime = millis();
   frog.start();              // ★音と同時にLEDマトリクスのカエルを開始
+}
+
+// リズムを停止する(STOP受信時)。
+void stopPlayback() {
+  playing = false;
+  frog.stop();               // カエル消灯
 }
 
 // 現在ステップの「擦る長さ(ms)」を giro.pde へ送信(休符は送らない)。

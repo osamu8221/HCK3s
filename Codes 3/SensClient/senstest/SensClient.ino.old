@@ -1,0 +1,21 @@
+#include <WiFiS3.h>
+#include "config.h"
+#include "Sensfunc.h"
+
+SensClass sens;
+
+
+void setup(){
+    sens.Starts();
+
+}
+void loop(){
+    if (sens.ready == 0){
+        // 親機への登録
+        sens.connection();
+    } 
+    else {
+        // 演奏指示の送信（福島さんの加速度検知ロジックと繋ぐ準備）
+        // 開発用デバッグ: Serial.println("演奏指示待機中..."); delay(1000);
+    }
+}
