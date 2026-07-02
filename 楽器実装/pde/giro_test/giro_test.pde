@@ -8,6 +8,12 @@ Serial myPort;
 Minim minim;
 AudioOutput out;
 
+// --- WAV録音: 出力 out(実際に鳴っている音)をそのまま録音する ---
+//   音色合成クラスには一切触れず、聞こえている音をそのまま wav 保存する。
+AudioRecorder recorder;   // 録音開始時に生成する
+boolean recording = false;
+String recFile = "";
+
 // ※ ビートパターン(リズム情報)は giro.pde には持たせない。
 //   Arduino(giro.ino)が保持し、「擦る長さ(ms)」をシリアルで送ってくる。
 //   giro.pde は受信した指示で音色生成・再生・波形表示のみを担当する。
@@ -48,6 +54,10 @@ void draw() {
   textSize(16);
   textAlign(LEFT, TOP);
   text("Role: Beat Rhythm Controller", 20, 20);
+  // 録音の状態と操作ガイド (r=録音開始 / s=停止&保存)
+  if (recording) { fill(255, 80, 80);   text("● REC  " + recFile, 20, 70); }
+  else           { fill(180, 180, 180); text("録音:  r=開始 / s=停止&保存", 20, 70); }
+  fill(255);   // 後続の text() の色を戻す
   text("Instrument: Wood Guiro 🪵 (Arduino-driven)", 20, 45);
 }
 
@@ -80,6 +90,40 @@ void serialEvent(Serial p) {
 // ==========================================
 // 音階を持たない純粋な打楽器としての「ギロ」
 // ==========================================
+// ============================================================
+// キー操作: r = 録音開始 / s = 停止して wav 保存
+//   出力 out を Minim の AudioRecorder でそのまま録音する(音色クラスには触れない)。
+//   保存先はこのスケッチのフォルダ。onkai.py / lsd.py の被検にそのまま使える。
+// ============================================================
+void keyPressed() {
+  if (key == 'r' || key == 'R') {
+    if (!recording) {
+      recFile = "giro_" + recTimestamp() + ".wav";
+      recorder = minim.createRecorder(out, recFile);
+      recorder.beginRecord();
+      recording = true;
+      println("● 録音開始: " + recFile);
+    } else {
+      println("すでに録音中です(s で停止・保存)");
+    }
+  } else if (key == 's' || key == 'S') {
+    if (recording && recorder != null) {
+      recorder.endRecord();
+      recorder.save();
+      recording = false;
+      println("■ 録音停止・保存: " + recFile + "  (フォルダ: " + sketchPath("") + ")");
+    } else {
+      println("録音していません(r で開始)");
+    }
+  }
+}
+
+// 録音ファイル名用のタイムスタンプ (YYYYMMDD_HHMMSS)
+String recTimestamp() {
+  return nf(year(),4) + nf(month(),2) + nf(day(),2) + "_"
+       + nf(hour(),2) + nf(minute(),2) + nf(second(),2);
+}
+
 class PercussiveGuiroInstrument implements Instrument {
   Summer mix;
   Oscil scrapeClicks;

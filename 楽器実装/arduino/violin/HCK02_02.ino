@@ -2,7 +2,7 @@
 // ボード: Arduino UNO R4 WiFi (オンボードESP32-S3 / WiFiS3ライブラリ)
 //
 // 役割:
-//   ・親機(同期制御 SyncMain / Codes 3)へ【TCPで自己登録】し、WELCOME→READY の後、
+//   ・親機(同期制御 SyncMain / Codes)へ【UDP HELLO で自己登録】し、WELCOME→READY の後、
 //     UDP命令 START / STOP / LEVEL:n を受信する(情報伝達は InstClass / Instfunc.cpp)。
 //   ・カエルの歌を【楽器ごとに声部を分けた輪唱】にして、この機が担当する1声部の音符を
 //     "Hz,ms" で Processing(violin.pde)へ送信する。
@@ -15,7 +15,7 @@
 // 接続:
 //   USB Serial (115200) -> このボード専用PCの violin.pde (バイオリンの音色・再生・波形)
 //     ※「Arduino 1台 につき PC 1台」。各楽器は自分のPCでProcessingを動かす。
-//   WiFi (TCP登録 + UDP命令) <- 親機 SyncMain (192.168.4.1)
+//   WiFi (UDP登録 + UDP命令) <- 親機 SyncMain (192.168.4.1)
 //
 // ★2026-06-24: 親機を Codes 3 に更新。プロトコルが変わったため楽器側も合わせた:
 //   ・開始は名前指定 "START:inst1" ではなく、親機が【この機のIP宛にunicast】する
@@ -56,7 +56,7 @@ int melodyLength = sizeof(melody) / sizeof(melody[0]);
 //   LEVEL 1:80bpm(375ms) 2:100bpm(300ms) 3:120bpm(250ms)
 //   ※添字は level-1。既定は DEFAULT_LEVEL(=2, 100bpm)。
 // ============================================================
-const int LEVEL_BPM[3] = {80, 100, 120};   // Codes 3 SyncMain と同一
+const int LEVEL_BPM[3] = {70,90,110};   // Codes 3 SyncMain と同一
 int tempoMs = 30000 / LEVEL_BPM[DEFAULT_LEVEL - 1];  // 既定 100bpm = 300ms
 
 // 演奏状態(非ブロッキングなシーケンサ)
@@ -78,7 +78,7 @@ void setup() {
 }
 
 void loop() {
-  // 1. まずはTCP接続と登録、READY通知を待つ
+  // 1. まずはUDP登録(HELLO→WELCOME)、READY通知を待つ
   if (inst.ready < 1) {
     if (!connectionReady && millis() - bootAt >= INITIAL_CONNECT_DELAY_MS) {
       connectionReady = true;

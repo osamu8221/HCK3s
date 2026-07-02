@@ -15,9 +15,12 @@
 #define REGISTERED_HELLO_RETRY_DELAY_MS 2000 // 登録後(READY待ち)の HELLO 再送間隔
 #define DEFAULT_LEVEL 2          // STOP後/起動時の既定レベル(Codes と統一)
 
-// この楽器(子機)の名前。親機 SyncMain の PLAYBACK_TARGET_GROUPS / numchild に
-// 含まれる名前にすること(例: namechild = {sens, inst1, inst2, inst3, inst4})。
-//   ★ボードごとに重複しない名前へ変更する (ギロ担当なら inst2 など)。
-#define myname "inst4"
+// この機の名前。Codes と同様に親機へUDP HELLO で登録するため、
+//   親機 SyncMain の namechild = {sens, inst1, inst2, inst3, inst4} の中の
+//   「他機と重複しない空きスロット名」にすること。
+//   ★violin=inst1 / giro=inst2 を使っている前提で、servoは inst3 を割り当てる。
+//   ※servoは登録スロットを1つ占有する。可視化のため START は全声部に反応する。
+//   ※親機 SyncMain の numchild は、登録する子機の総数(sens + 各inst)に合わせること。
+#define myname "inst3"
 
 #endif

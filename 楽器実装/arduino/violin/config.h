@@ -17,7 +17,7 @@
 
 // この楽器(子機)の名前。親機 SyncMain の PLAYBACK_TARGET_GROUPS / numchild に
 // 含まれる名前にすること(例: namechild = {sens, inst1, inst2, inst3, inst4})。
-//   ★ボードごとに重複しない名前へ変更する (ギロ担当なら inst2 など)。
-#define myname "inst4"
+//   ★ボードごとに重複しない名前へ変更する (violin担当なら inst1 など)。
+#define myname "inst1"
 
 #endif

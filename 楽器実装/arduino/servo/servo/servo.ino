@@ -2,7 +2,7 @@
 // ボード: Arduino UNO R4 WiFi (オンボードESP32-S3 / WiFiS3ライブラリ)
 //
 // 役割:
-//   ・親機(同期制御 SyncMain / Codes 3)へ【TCPで自己登録】し、WELCOME→READY の後、
+//   ・親機(同期制御 SyncMain / Codes)へ【UDP HELLO で自己登録】し、WELCOME→READY の後、
 //     UDP命令 START / STOP / LEVEL:n を受信する。
 //   ・カエルの歌の【輪唱(複数声部)】を全声部ぶんシミュレートして、各ステップで鳴っている
 //     全声部の「音階」に対応するサーボを動かす。
@@ -25,18 +25,18 @@
 //     (servoを各グループに入れない場合は、servoが受けた1回のSTARTで第1声のみ表示される)
 //
 // 接続:
-//   WiFi (TCP登録 + UDP命令) <- 親機 SyncMain (192.168.4.1)
+//   WiFi (UDP登録 + UDP命令) <- 親機 SyncMain (192.168.4.1)
 //   サーボ6機の信号線 = A0,A1,A2,A3,A4,A5 (アナログピンをデジタル出力として使用)
 //     ※サーボの電源は外部5V電源から供給し、GNDをArduinoと共通にする。
 //     ※USB Serialはデバッグ表示用(任意/115200)。このボードはProcessingには繋がない。
 //
 // ★前提(親機 SyncMain 側):
 //   ・config.h の myname(=inst3) は親機 namechild に存在する空きスロットにすること。
-//   ・親機 numchild は TCP登録する子機の総数(sens + 各inst + このservo)に合わせること。
+//   ・親機 numchild は登録する子機の総数(sens + 各inst + このservo)に合わせること。
 //     合っていないと READY が来ず ready が 1 に上がらない。
 //   ・上記のとおり PLAYBACK_TARGET_GROUPS の各グループに inst3 を併記すること(全声部可視化時)。
 
-#include "Instfunc.h"     // Codes 3 と同一: 情報伝達(TCP登録/UDP命令受信)
+#include "Instfunc.h"     // Codes と同一: 情報伝達(UDP登録/UDP命令受信)
 #include "config.h"       // 通信設定 + この機の myname
 #include <Servo.h>
 
@@ -71,10 +71,15 @@ const float NOTE_HZ[NUM_SERVOS]  = {523.2, 587.3, 659.2, 698.4, 784.0, 880.0}; /
 const int   SERVO_PIN[NUM_SERVOS] = {A0, A1, A2, A3, A4, A5};
 Servo servos[NUM_SERVOS];
 
-const int REST_ANGLE   = 0;   // 待機角
-const int ACTIVE_ANGLE = 70;  // 発音時に動かす角
-// 各サーボを基準角へ戻す時刻(0=既に戻し済み)。非ブロッキングで戻すために使う。
-unsigned long servoReturnAt[NUM_SERVOS];
+// 可動角: 振り幅(ACTIVE-REST)を小さいほど「速く・確実」(可動時間が短く低電流、
+//   同時駆動でも電圧降下しにくい)。大きく振りたいときは ACTIVE_ANGLE を上げる。
+const int REST_ANGLE   = 10;  // 待機角(0=端当ては唸り/引っかかりの元。少し浮かせる)
+const int ACTIVE_ANGLE = 50;  // 発音時の角(振り幅40°: 70°より速く・低電流で確実)
+// 各サーボの現在の物理状態(true=上げている)。
+//   「音が変わった時だけ」上げ下げし、同音・保持音は上げっぱなしにする。
+//   → 連打・保持音での往復(バタつき)を無くし、各動作にフル1ステップの
+//     可動時間を与えて「動かない/遅れる」を防ぐ。
+bool servoUp[NUM_SERVOS];
 
 // ============================================================
 // テンポ: 親機 Codes 3 の LEVEL_BPM と一致させる(楽器用Arduinoと同一)。
@@ -104,7 +109,7 @@ void setup() {
   for (int i = 0; i < NUM_SERVOS; i++) {
     servos[i].attach(SERVO_PIN[i]);
     servos[i].write(REST_ANGLE);
-    servoReturnAt[i] = 0;
+    servoUp[i] = false;
   }
   for (int v = 0; v < VOICE_COUNT; v++) {
     voiceActive[v] = false;
@@ -118,7 +123,7 @@ void setup() {
 }
 
 void loop() {
-  // 1. まずはTCP接続と登録、READY通知を待つ(InstClient.inoと同じ流れ)
+  // 1. まずはUDP登録(HELLO→WELCOME)、READY通知を待つ(InstClient.inoと同じ流れ)
   if (inst.ready < 1) {
     if (!connectionReady && millis() - bootAt >= INITIAL_CONNECT_DELAY_MS) {
       connectionReady = true;
@@ -134,7 +139,6 @@ void loop() {
     Serial.print("[UDP受信] '"); Serial.print(cmd); Serial.println("'");
   }
   handleCommand(cmd);
-  releaseServos();            // 発音時間が過ぎたサーボを基準角へ戻す
 
   // 3. マスタークロックによるステップ送り(millis()で非ブロッキング)
   if (playing) {
@@ -224,36 +228,36 @@ void stopAll() {
   }
   for (int i = 0; i < NUM_SERVOS; i++) {
     servos[i].write(REST_ANGLE);
-    servoReturnAt[i] = 0;
+    servoUp[i] = false;
   }
 }
 
-// このステップで鳴っている全声部の音階に対応するサーボを動かす。
+// このステップで鳴っている全声部の音階を集計し、「上げるべきサーボ」を求めて、
+// 前ステップから状態が変わったサーボだけを動かす。
+//   ・同音/保持音が続くサーボは上げたまま(再書き込みしない=往復しない)。
+//   ・音が止んだ(休符)/別の音へ変わったサーボだけ下げる。
+//   これで「連続同音がキツい」「動かない/遅れる」を解消する(動かす回数を最小化)。
 void stepServos() {
-  unsigned long releaseAt = millis() + (unsigned long)(tempoMs * 0.8); // ゲート率80%
+  bool want[NUM_SERVOS];
+  for (int i = 0; i < NUM_SERVOS; i++) want[i] = false;
+
+  // 全声部で今このステップに鳴っている音のサーボを立てる(重複はORでまとまる)。
   for (int v = 0; v < VOICE_COUNT; v++) {
     if (!voiceActive[v]) continue;
-    moveServoForPos(playPos - voiceStartPos[v], releaseAt);
+    long pos = playPos - voiceStartPos[v];
+    if (pos < 0) continue;
+    int idx = soundingServoIndex(pos);   // 休符は直前の音を保持=伸ばす音も上げたまま
+    if (idx >= 0) want[idx] = true;
   }
-}
 
-// 指定位置の音階に対応するサーボを動かす(休符・未開始は何もしない)。
-void moveServoForPos(long pos, unsigned long releaseAt) {
-  if (pos < 0) return;
-  int idx = pitchToServoIndex(melody[pos % melodyLength]);
-  if (idx >= 0) {
-    servos[idx].write(ACTIVE_ANGLE);
-    servoReturnAt[idx] = releaseAt;        // 発音時間が過ぎたら基準角へ戻す
-  }
-}
-
-// 発音時間が過ぎたサーボを基準角へ戻す。
-void releaseServos() {
-  unsigned long now = millis();
+  // 状態が変わったサーボだけ動かす(下げ→上げ / 上げ→下げ)。同状態は触らない。
   for (int i = 0; i < NUM_SERVOS; i++) {
-    if (servoReturnAt[i] != 0 && now >= servoReturnAt[i]) {
+    if (want[i] && !servoUp[i]) {
+      servos[i].write(ACTIVE_ANGLE);
+      servoUp[i] = true;
+    } else if (!want[i] && servoUp[i]) {
       servos[i].write(REST_ANGLE);
-      servoReturnAt[i] = 0;
+      servoUp[i] = false;
     }
   }
 }
@@ -263,6 +267,17 @@ int pitchToServoIndex(float pitch) {
   if (pitch <= 0.0) return -1;
   for (int i = 0; i < NUM_SERVOS; i++) {
     if (fabs(pitch - NOTE_HZ[i]) < 1.0) return i;
+  }
+  return -1;
+}
+
+// 指定ステップの「今鳴っている音」のサーボ番号を返す。
+//   休符(0.0)のステップは直前の非休符音まで遡る=音が伸びている間はそのサーボを保持。
+//   → 連続する同音だけでなく、伸ばす音でもサーボを上げっぱなしにする(動かすのは音が変わった時だけ)。
+int soundingServoIndex(long pos) {
+  for (int k = 0; k < melodyLength; k++) {
+    long m = ((pos - k) % melodyLength + melodyLength) % melodyLength;
+    if (melody[m] > 0.0) return pitchToServoIndex(melody[m]);
   }
   return -1;
 }
