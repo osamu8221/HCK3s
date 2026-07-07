@@ -11,7 +11,7 @@ class InstClass{
         WiFiClient client;
         IPAddress serverIP;
         WiFiUDP udp;
-        unsigned long lastHelloMs;   // UDP HELLO 再送のタイミング管理
+        unsigned long lastHelloMs;
 
     public:
         InstClass();

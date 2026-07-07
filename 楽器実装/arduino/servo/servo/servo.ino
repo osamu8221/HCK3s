@@ -3,7 +3,7 @@
 //
 // 役割:
 //   ・親機(同期制御 SyncMain / Codes)へ【UDP HELLO で自己登録】し、WELCOME→READY の後、
-//     UDP命令 START / STOP / LEVEL:n を受信する。
+//     UDP命令 START / STOP / BPM:n を受信する。
 //   ・カエルの歌の【輪唱(複数声部)】を全声部ぶんシミュレートして、各ステップで鳴っている
 //     全声部の「音階」に対応するサーボを動かす。
 //     (カエルの歌は ド・レ・ミ・ファ・ソ・ラ の6音 → サーボ6機に1対1で割り当て)
@@ -82,11 +82,10 @@ const int ACTIVE_ANGLE = 50;  // 発音時の角(振り幅40°: 70°より速く
 bool servoUp[NUM_SERVOS];
 
 // ============================================================
-// テンポ: 親機 Codes 3 の LEVEL_BPM と一致させる(楽器用Arduinoと同一)。
+// テンポ: 親機 Codesv5 から BPM:n を受信して設定する(楽器用Arduinoと同一)。
 //   8分音符の長さ(ms) = 30000 / bpm  /  LEVEL 1/2/3 = 80/100/120 bpm
 // ============================================================
-const int LEVEL_BPM[3] = {80, 100, 120};   // Codes 3 SyncMain と同一
-int tempoMs = 30000 / LEVEL_BPM[DEFAULT_LEVEL - 1];  // 既定 100bpm = 300ms
+int tempoMs = 30000 / DEFAULT_BPM;  // 既定テンポ(親機 Codesv5 の DEFAULT_BPM=100 と統一)
 
 bool playing = false;
 unsigned long lastStepTime = 0;
@@ -180,16 +179,19 @@ void handleCommand(String command) {
   } else if (command == "STOP") {
     stopAll();           // 全声部を停止・初期化し、サーボを基準角へ戻す
     inst.ready = 1;      // 開始待ちへ戻す
-    tempoMs = 30000 / LEVEL_BPM[DEFAULT_LEVEL - 1];  // 既定テンポへ戻す
+    inst.currentBpm = DEFAULT_BPM;
+    tempoMs = 30000 / inst.currentBpm;  // 既定テンポ(親機 Codesv5)へ戻す
     Serial.println("STOP");
 
-  } else if (command.startsWith("LEVEL:") && command.length() > 6) {
-    int level = command.substring(6).toInt();
-    if (level < 1) level = 1;
-    if (level > 3) level = 3;
-    tempoMs = 30000 / LEVEL_BPM[level - 1];
-    Serial.print("LEVEL:");
-    Serial.println(level);
+  } else if (command.startsWith("BPM:") && command.length() > 4) {
+    // BPM直接指定(親機 Codesv5 の主経路): tempoMsを即時更新し次ステップから反映
+    int bpm = command.substring(4).toInt();
+    if (bpm >= MIN_BPM && bpm <= MAX_BPM) {
+      inst.currentBpm = bpm;
+      tempoMs = 30000 / bpm;
+      Serial.print("BPM:");
+      Serial.println(bpm);
+    }
   }
 }
 
@@ -246,7 +248,10 @@ void stepServos() {
     if (!voiceActive[v]) continue;
     long pos = playPos - voiceStartPos[v];
     if (pos < 0) continue;
-    int idx = soundingServoIndex(pos);   // 休符は直前の音を保持=伸ばす音も上げたまま
+    // 次のステップが発音開始(onset)の休符では一旦下げる。
+    //   → 休符を挟んで同じ音が繰り返す区間でも、各音で打鍵(動き)が見えるようにする。
+    if (melody[pos % melodyLength] <= 0.0 && melody[(pos + 1) % melodyLength] > 0.0) continue;
+    int idx = soundingServoIndex(pos);   // 休符は直前の音を保持=伸ばす音は上げたまま
     if (idx >= 0) want[idx] = true;
   }
 

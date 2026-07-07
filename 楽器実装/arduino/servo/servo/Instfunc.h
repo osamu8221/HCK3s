@@ -18,6 +18,7 @@ class InstClass{
         bool isRegistered;
         int ready;
         int currentLevel;
+        int currentBpm;
         void Starts();
         void WiFiStart();
         void startUDP();

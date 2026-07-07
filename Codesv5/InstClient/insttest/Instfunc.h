@@ -11,7 +11,6 @@ class InstClass{
         WiFiClient client;
         IPAddress serverIP;
         WiFiUDP udp;
-        unsigned long lastHelloMs;   // UDP HELLO 再送のタイミング管理
 
     public:
         InstClass();
@@ -28,6 +27,7 @@ class InstClass{
         String receiveTCP(WiFiClient &c);
         String receiveUDP(WiFiUDP &u);
         String recieveCommand();
+        bool recieveCommandFast(char *buffer, size_t bufferSize);
 
         // 新機能
         void recieveStart();

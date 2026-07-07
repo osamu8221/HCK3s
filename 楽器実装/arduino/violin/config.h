@@ -15,6 +15,10 @@
 #define REGISTERED_HELLO_RETRY_DELAY_MS 2000 // 登録後(READY待ち)の HELLO 再送間隔
 #define DEFAULT_LEVEL 2          // STOP後/起動時の既定レベル(Codes と統一)
 
+#define DEFAULT_BPM 100          // BPM未受信時の既定テンポ(親機 Codesv5 と統一)
+#define MIN_BPM 40               // BPM:コマンドの下限
+#define MAX_BPM 240              // BPM:コマンドの上限
+
 // この楽器(子機)の名前。親機 SyncMain の PLAYBACK_TARGET_GROUPS / numchild に
 // 含まれる名前にすること(例: namechild = {sens, inst1, inst2, inst3, inst4})。
 //   ★ボードごとに重複しない名前へ変更する (violin担当なら inst1 など)。

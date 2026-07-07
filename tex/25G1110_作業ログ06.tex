@@ -1,0 +1,130 @@
+\documentclass[uplatex,dvipdfmx]{jlreq}
+\usepackage[fleqn,tbtags]{mathtools}
+\usepackage{jlreq-deluxe}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[noalphabet]{pxchfon} % must be after otf package
+\usepackage{stix2} %欧文＆数式フォント
+\usepackage[fleqn,tbtags]{mathtools} % 数式関連 (w/ amsmath)
+\usepackage{url}
+\usepackage{here}
+\geometry{left=20mm,right=20mm,top=25mm,bottom=25mm}
+
+\title{作業ログ\\ \large 加速度センサーを用いた身体動作による輪唱制御システムの構築と視覚フィードバック効果}
+\author{報告者: 早川　和輝}
+\date{報告日: 2026年7月8日}
+
+\begin{document}
+\maketitle
+
+\section{進捗サマリー(要約)}
+\begin{itemize}
+    \item 全体進捗率: [98\%]
+    \item マイルストーン達成状況: [達成]
+    \item 主要成果:
+    \begin{itemize}
+        \item 成果1: LEDマトリクスの「カエル」アニメーションを再作成し，演奏に合わせた表示に更新した．
+        \item 成果2: 土台に固定したサーボモーターに割り箸を取り付け，その割り箸にカエルの折り紙を貼付する物理機構を作成した．
+        \item 成果3: サーボ制御コードの不具合(「ド」が連続する区間でサーボが動作しない)を調査・修正し，結合テストに成功した．
+    \end{itemize}
+    \item 重大課題(影響度:無し): なし
+\end{itemize}
+
+\section{作業ログ(詳細トラッキング)}
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lp{1.5cm}p{1.5cm}llp{2.5cm}p{3cm}}
+        \toprule
+        作業項目 & 開始日 & 完了日 & 状態 & 進捗率 & 依存関係・ブロッカー & コメント \\
+        \midrule
+        マトリクスのカエル再作成 & [7/1] & [7/3] & 完了 & 100\% & なし & LEDマトリクスのカエルアニメーションを再作成し，表示を更新． \\
+        サーボ物理機構の作成 & [7/3] & [7/5] & 完了 & 100\% & なし & 土台のサーボに割り箸を固定し，割り箸へカエルの折り紙を貼付． \\
+        サーボコードの修正 & [7/5] & [7/7] & 完了 & 100\% & なし & 「ド」が連続する区間で動作しない原因を調査し修正． \\
+        結合テスト & [7/6] & [7/7] & 完了 & 100\% & なし & 音・サーボ・LEDマトリクスの結合テストを実施し成功． \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{担当箇所の計画前のGCと現在のGC}
+担当箇所である「楽器演奏実装」および「統合」における，当初計画時（計画前）のガントチャート（GC）の予定と，現在の進捗・変更状況の比較である．
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lp{4cm}p{4cm}l}
+        \toprule
+        タスク名 & 計画前のGC（予定期間） & 現在のGC（実績・修正期間） & 進捗状態 \\
+        \midrule
+        マトリクスのカエル再作成 & [7/1 $\sim$ 7/3] & [7/1 $\sim$ 7/3] & 完了 \\
+        サーボ物理機構の作成 & [7/3 $\sim$ 7/5] & [7/3 $\sim$ 7/5] & 完了 \\
+        サーボコード修正・結合テスト & [7/5 $\sim$ 7/7] & [7/5 $\sim$ 7/7] & 完了 \\
+        \bottomrule
+    \end{tabular}
+\end{table}\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{gant8.pdf}
+    \caption{ガントチャート}
+\end{figure}
+
+\section{日ごとの作業時間と作業内容}
+今週実施した日ごとの具体的な作業時間および対応内容の詳細です．
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{lll}
+        \toprule
+        日付 & 作業時間 & 作業内容 \\
+        \midrule
+        {}[7/2] & [3.0時間] & LEDマトリクスの「カエル」アニメーションの再作成． \\
+        {}[7/4] & [2.5時間] & サーボ機構の作成（割り箸の固定とカエルの折り紙の貼付）． \\
+        {}[7/7] & [3.0時間] & サーボコードの修正（「ド」連続区間で動かない不具合の調査・修正）と結合テスト． \\
+        \midrule
+        \textbf{合計} & \textbf{[8.5時間]} & \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{課題管理}
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{p{3cm}p{3cm}llp{3cm}ll}
+        \toprule
+        課題 & 発生原因 & 影響度 & 優先度 & 対策 & 期限 & 状態 \\
+        \midrule
+        「ド」が連続する区間でサーボが動作しない & 休符中も直前の音を保持し続け，同音が繋がってサーボが上げっぱなしになるため & 中 & 高 & 次のステップが発音開始となる休符では一度サーボを下げ，各音で打鍵されるよう修正した & [7/7] & 解決 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+\vspace{0.5em}
+\noindent ※影響度=プロジェクトへのインパクト，優先度=対応の緊急性
+
+\section{AI 利用状況と検証(再現性重視)}
+\subsection{利用内容}
+\begin{itemize}
+    \item 利用目的: サーボ制御コードの不具合調査，および作業ログの作成
+    \item  入力(プロンプト要旨):
+    \begin{itemize}
+        \item 「ド」が連続する区間でサーボが動作しない不具合について，原因の調査を依頼．
+    \end{itemize}
+    \item  出力概要:
+    \begin{itemize}
+        \item 不具合原因（休符中の音の保持によりサーボが上げっぱなしになる）の特定．
+    \end{itemize}
+\end{itemize}
+
+\subsection{検証方法}
+\begin{itemize}
+    \item  検証手法: メロディに対するサーボ動作のシミュレーションおよび実機（結合テスト）での動作確認
+    \item  参照資料: サーボ制御コード（servo.ino）およびカエルの歌の楽譜データ
+    \item  検証手順:
+    \begin{enumerate}
+        \item 修正前後のコードで当該区間のサーボ動作をシミュレートし，各音で打鍵（動作）されることを確認．
+        \item 実機で結合テストを行い，音・サーボ・LEDマトリクスが連動して動作することを確認．
+    \end{enumerate}
+\end{itemize}
+
+\section{その他}
+
+\end{document}

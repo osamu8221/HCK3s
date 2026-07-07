@@ -1,7 +1,8 @@
 #include "Instfunc.h"
 
 InstClass::InstClass()
-    : lastHelloMs(0), isRegistered(false), ready(0), currentLevel(DEFAULT_LEVEL) {
+    : lastHelloMs(0), isRegistered(false), ready(0), currentLevel(DEFAULT_LEVEL),
+      currentBpm(DEFAULT_BPM) {
     serverIP.fromString(SERVER_IP);
 }
 

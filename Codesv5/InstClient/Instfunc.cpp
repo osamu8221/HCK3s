@@ -44,45 +44,43 @@ bool InstClass::connectToServer() {
 
 void InstClass::sendIdentification(const char* name) {
     client.println(name);
-    Serial.print("Sent identification: ");
-    Serial.println(name);
 }
 
-// 親機(SyncMain / Codes)へ【UDPで自己登録】する。
-//   ・"HELLO|myname" を UDP で親機へ送る(未登録のうちは短い間隔、登録後はゆっくり再送)。
-//   ・親機は "WELCOME"(登録受理)を返し、全子機がそろうと "READY" を返す。
-//   ・READY を受信したら ready=1(演奏開始待ち)へ進む。
-//   ※ Codes は登録をTCPからUDPへ変更したため、こちらもUDP登録に合わせている。
 void InstClass::connection(){
     if (ready >= 1) {
         return;
+    }
+
+    String resp = receiveUDP(udp);
+    while (resp.length() > 0) {
+        if (resp == "WELCOME") {
+            if (!isRegistered) {
+                isRegistered = true;
+                Serial.println("Server registered this device (WELCOME).");
+            }
+        } else if (resp == "READY") {
+            isRegistered = true;
+            ready = 1;
+            Serial.println("全員の準備が整いました (READY受信)");
+            return;
+        }
+        resp = receiveUDP(udp);
     }
 
     unsigned long now = millis();
     unsigned long retryDelay = this->isRegistered ?
         REGISTERED_HELLO_RETRY_DELAY_MS : CONNECTION_RETRY_DELAY_MS;
     if (now - this->lastHelloMs >= retryDelay) {
+        bool firstHello = this->lastHelloMs == 0;
         udp.beginPacket(serverIP, UDP_PORT);
         udp.print("HELLO|");
         udp.print(myname);
         udp.endPacket();
         this->lastHelloMs = now;
-        if (!this->isRegistered) {
+        if (!this->isRegistered && firstHello) {
             Serial.print("UDP HELLO送信: ");
             Serial.println(myname);
         }
-    }
-
-    String resp = receiveUDP(udp);
-    if (resp == "WELCOME") {
-        if (!isRegistered) {
-            isRegistered = true;
-            Serial.println("Server registered this device (WELCOME).");
-        }
-    } else if (resp == "READY") {
-        isRegistered = true;
-        ready = 1;
-        Serial.println("全員の準備が整いました (READY受信)");
     }
 }
 
@@ -138,6 +136,9 @@ int InstClass::recieveLevel() {
     if (msg.startsWith("LEVEL:")) {
         String val = msg.substring(6);
         int level = val.toInt();
+        if (level >= 1 && level <= 3) {
+            this->currentBpm = LEVEL_BPM[level - 1];
+        }
         Serial.print("[UDP] 速度レベル受信: "); Serial.println(level);
         return level;
     }
@@ -152,9 +153,22 @@ int InstClass::recieveInstruction() {
 
     if (msg.startsWith("LEVEL:")) {
         this->currentLevel = msg.substring(6).toInt();
+        if (this->currentLevel >= 1 && this->currentLevel <= 3) {
+            this->currentBpm = LEVEL_BPM[this->currentLevel - 1];
+        }
         Serial.print("[UDP] 速度レベル受信: ");
         Serial.println(this->currentLevel);
         return this->currentLevel;
+    }
+
+    if (msg.startsWith("BPM:")) {
+        int bpm = msg.substring(4).toInt();
+        if (bpm >= MIN_BPM && bpm <= MAX_BPM) {
+            this->currentBpm = bpm;
+            Serial.print("[UDP] BPM受信: ");
+            Serial.println(this->currentBpm);
+            return this->currentBpm;
+        }
     }
 
     return 0;

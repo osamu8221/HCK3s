@@ -30,8 +30,8 @@ const float NOTE_HZ[NUM_SERVOS]    = {523.2, 587.3, 659.2, 698.4, 784.0, 880.0};
 const char* NOTE_NAME[NUM_SERVOS]  = {"ド(C5)", "レ(D5)", "ミ(E5)", "ファ(F5)", "ソ(G5)", "ラ(A5)"};
 
 // 可動角(本番 servo.ino と同一)。振り幅を小さいほど速く・確実。
-const int REST_ANGLE   = 10;  // 待機角(端当て回避で少し浮かせる)
-const int ACTIVE_ANGLE = 50;  // 発音時の角(振り幅40°)
+const int REST_ANGLE   = 0;  // 待機角(端当て回避で少し浮かせる)
+const int ACTIVE_ANGLE = 80;  // 発音時の角(振り幅40°)
 
 // テンポ(本番 servo.ino / 親機 Codes と同一)。8分音符の長さ(ms)=30000/bpm。
 //   LEVEL 1/2/3 = 80/100/120 bpm。既定は LEVEL 2(100bpm=300ms)。
@@ -111,8 +111,11 @@ void stepServos() {
   bool want[NUM_SERVOS];
   for (int i = 0; i < NUM_SERVOS; i++) want[i] = false;
 
-  int idx = soundingServoIndex(playPos);   // 休符は直前の音を保持=伸ばす音も上げたまま
-  if (idx >= 0) want[idx] = true;
+  // 次のステップが発音開始(onset)の休符では一旦下げ、休符を挟んで繰り返す同音も各音で打鍵を見せる。
+  if (!(melody[playPos % melodyLength] <= 0.0 && melody[(playPos + 1) % melodyLength] > 0.0)) {
+    int idx = soundingServoIndex(playPos);   // 休符は直前の音を保持=伸ばす音は上げたまま
+    if (idx >= 0) want[idx] = true;
+  }
 
   for (int i = 0; i < NUM_SERVOS; i++) {
     if (want[i] && !servoUp[i]) {

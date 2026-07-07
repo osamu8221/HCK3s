@@ -3,7 +3,7 @@
 //
 // 役割:
 //   ・親機(同期制御 SyncMain / Codes)へ【UDP HELLO で自己登録】し、WELCOME→READY の後、
-//     UDP命令 START / STOP / LEVEL:n を受信する(情報伝達は InstClass / Instfunc.cpp)。
+//     UDP命令 START / STOP / BPM:n を受信する(情報伝達は InstClass / Instfunc.cpp)。
 //   ・ギロのビートパターン(リズム)を【このArduinoが保持】し、各8分音符ステップの
 //     「擦る長さ(ms)」を giro.pde へシリアル送信する。
 //   ・giro.pde 側は音色生成・再生・波形表示のみを担当する(.pdeは変更しない)。
@@ -22,7 +22,7 @@
 // 親機 SyncMain(Codes 3) から受信するUDP命令 (バイオリン用inoと共通):
 //   "START"   : 演奏開始(この機のIP宛にunicast。受信=自分の出番)
 //   "STOP"    : 停止(broadcast)。開始待ちへ戻り LEVEL=2 に戻す
-//   "LEVEL:1" 〜 "LEVEL:3" : 速度レベル(broadcast。全機が受信して反映)
+//   "BPM:n" : テンポ(bpm)を直接指定(broadcast。全機が受信して反映)
 //
 // この機の名前は config.h の myname で設定する(ギロ担当=inst2 など)。
 
@@ -48,13 +48,10 @@ float beatPattern[] = {
 const int patternLength = sizeof(beatPattern) / sizeof(beatPattern[0]);
 
 // ============================================================
-// テンポ: 親機 Codes 3 の LEVEL_BPM と一致させる(輪唱の8拍ずれが揃うため必須)。
+// テンポ: 親機 Codesv5 から BPM:n を受信して設定する(輪唱の8拍ずれが揃うため必須)。
 //   8分音符の長さ(ms) = 30000 / bpm
-//   LEVEL 1:80bpm(375ms) 2:100bpm(300ms) 3:120bpm(250ms)
-//   ※添字は level-1。既定は DEFAULT_LEVEL(=2, 100bpm)。
 // ============================================================
-const int LEVEL_BPM[3] = {70, 90, 110};   // Codes 3 SyncMain と同一
-int tempoMs = 30000 / LEVEL_BPM[DEFAULT_LEVEL - 1];  // 既定 100bpm = 300ms
+int tempoMs = 30000 / DEFAULT_BPM;  // 既定テンポ(親機 Codesv5 の DEFAULT_BPM=100 と統一)
 
 // 演奏状態
 bool playing = false;
@@ -114,18 +111,19 @@ void handleCommand(String command) {
   } else if (command == "STOP") {
     inst.ready = 1;          // 開始待ちへ戻す
     stopPlayback();
-    inst.currentLevel = DEFAULT_LEVEL;
-    tempoMs = 30000 / LEVEL_BPM[DEFAULT_LEVEL - 1];   // 既定テンポへ戻す
+    inst.currentBpm = DEFAULT_BPM;
+    tempoMs = 30000 / inst.currentBpm;   // 既定テンポ(親機 Codesv5)へ戻す
     Serial.println("STOP");
 
-  } else if (command.startsWith("LEVEL:") && command.length() > 6) {
-    int level = command.substring(6).toInt();
-    if (level < 1) level = 1;
-    if (level > 3) level = 3;
-    inst.currentLevel = level;
-    tempoMs = 30000 / LEVEL_BPM[level - 1];
-    Serial.print("LEVEL:");
-    Serial.println(level);
+  } else if (command.startsWith("BPM:") && command.length() > 4) {
+    // BPM直接指定(親機 Codesv5 の主経路): tempoMsを即時更新し次ステップから反映
+    int bpm = command.substring(4).toInt();
+    if (bpm >= MIN_BPM && bpm <= MAX_BPM) {
+      inst.currentBpm = bpm;
+      tempoMs = 30000 / bpm;
+      Serial.print("BPM:");
+      Serial.println(bpm);
+    }
   }
 }
 
